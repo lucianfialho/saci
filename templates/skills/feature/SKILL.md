@@ -1,5 +1,5 @@
 ---
-name: saci-feature
+name: feature
 description: Implement new features or write code. Use when the user asks to "implement", "create", "build", "add feature", or "develop" something.
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Find, LS, View, CommandStatus
 ---

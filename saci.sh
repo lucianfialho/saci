@@ -199,8 +199,8 @@ $system_prompt
 
 ## Available Skills
 You have access to specialized skills. **Contextually decide** to use them based on the task description:
-- **saci-feature**: For implementing new features, creating files, and architectural work.
-- **saci-verify**: For verification, writing tests, debugging, and fixing broken code.
+- **feature**: For implementing new features, creating files, and architectural work.
+- **verify**: For verification, writing tests, debugging, and fixing broken code.
 
 ## Description
 $description

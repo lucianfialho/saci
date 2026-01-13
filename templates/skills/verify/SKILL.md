@@ -1,5 +1,5 @@
 ---
-name: saci-verify
+name: verify
 description: Verify code, run tests, debug issues, and fix bugs. Use when the user asks to "verify", "test", "debug", "fix", "check", or "validate" something.
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Find, LS, View, CommandStatus
 ---

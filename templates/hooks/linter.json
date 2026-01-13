@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$HOME/.claude/hooks/saci-linter.py\""
+            "command": "python3 \"$HOME/.claude/hooks/linter.py\""
           }
         ]
       }
