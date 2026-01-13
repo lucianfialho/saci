@@ -364,13 +364,13 @@ run_scan() {
     fi
      
     # ========================================================================
-    # Generate CLAUDE.md (Skills)
+    # Generate AGENTS.md
     # ========================================================================
-    local claude_template_file="$script_dir/templates/CLAUDE.md"
-    local claude_output_file="CLAUDE.md"
+    local agents_template_file="$script_dir/templates/AGENTS.md"
+    local agents_output_file="AGENTS.md"
     
-    if [ -f "$claude_template_file" ] && [ ! -f "$claude_output_file" ]; then
-        log_info "Generating CLAUDE.md (skills)..."
+    if [ -f "$agents_template_file" ] && [ ! -f "$agents_output_file" ]; then
+        log_info "Generating AGENTS.md..."
         
         # Detect scripts/commands
         local commands_list=""
@@ -398,28 +398,25 @@ run_scan() {
         # Replace in template (using perl/awk for safer block replacement or loop)
         # We'll use simple sed for single lines and loop for block
         
-        cp "$claude_template_file" "$claude_output_file"
+        cp "$agents_template_file" "$agents_output_file"
         
-        sed -i '' "s|{{PROJECT_NAME}}|$project_name|g" "$claude_output_file"
-        sed -i '' "s|{{PROJECT_DESCRIPTION}}|TODO: Add description|g" "$claude_output_file"
-        sed -i '' "s|{{STACK_LIST}}|$stack_list|g" "$claude_output_file"
-        sed -i '' "s|{{LANGUAGE}}|$language|g" "$claude_output_file"
-        sed -i '' "s|{{FRAMEWORK}}|$framework|g" "$claude_output_file"
-        sed -i '' "s|{{TEST_FRAMEWORK}}|$test_framework|g" "$claude_output_file"
+        sed -i '' "s|{{PROJECT_NAME}}|$project_name|g" "$agents_output_file"
+        sed -i '' "s|{{PROJECT_DESCRIPTION}}|TODO: Add description|g" "$agents_output_file"
+        sed -i '' "s|{{STACK_LIST}}|$stack_list|g" "$agents_output_file"
+        sed -i '' "s|{{LANGUAGE}}|$language|g" "$agents_output_file"
+        sed -i '' "s|{{FRAMEWORK}}|$framework|g" "$agents_output_file"
+        sed -i '' "s|{{TEST_FRAMEWORK}}|$test_framework|g" "$agents_output_file"
         
         # Replace commands list (multiline)
-        # Using awk to replace string with file content is safer
         if [ -n "$commands_list" ]; then
             echo "$commands_list" > commands.tmp
-            # Replace placeholder with content of temp file
-            # This awk logic replaces the placeholder line with the file content
-            awk 'FNR==NR{a[NR]=$0;next} /{{COMMANDS_LIST}}/{for(i=1;i<=length(a);i++)print a[i];next} 1' commands.tmp "$claude_output_file" > "${claude_output_file}.tmp" && mv "${claude_output_file}.tmp" "$claude_output_file"
+            awk 'FNR==NR{a[NR]=$0;next} /{{COMMANDS_LIST}}/{for(i=1;i<=length(a);i++)print a[i];next} 1' commands.tmp "$agents_output_file" > "${agents_output_file}.tmp" && mv "${agents_output_file}.tmp" "$agents_output_file"
             rm commands.tmp
         else
-            sed -i '' "s|{{COMMANDS_LIST}}|- build: npm run build\n- test: npm test|g" "$claude_output_file"
+            sed -i '' "s|{{COMMANDS_LIST}}|- build: npm run build\n- test: npm test|g" "$agents_output_file"
         fi
         
-        log_success "Created CLAUDE.md with detected commands"
+        log_success "Created AGENTS.md with detected context"
     fi
     
     echo ""

@@ -50,57 +50,34 @@ echo "Installing Claude Code Skills to $CLAUDE_SKILLS_DIR..."
 mkdir -p "$CLAUDE_SKILLS_DIR"
 cp -r templates/skills/* "$CLAUDE_SKILLS_DIR/"
 
-echo "Installing Claude Code Hooks to $CLAUDE_HOOKS_DIR..."
+echo "Installing Saci safety hook script to $CLAUDE_HOOKS_DIR..."
 mkdir -p "$CLAUDE_HOOKS_DIR"
-# Copy scripts if they exist
-if [ -d "templates/hooks/scripts" ]; then
-    cp templates/hooks/scripts/* "$CLAUDE_HOOKS_DIR/"
-    chmod +x "$CLAUDE_HOOKS_DIR/"*
+if [ -f "templates/hooks/scripts/safety-check.py" ]; then
+    cp templates/hooks/scripts/safety-check.py "$CLAUDE_HOOKS_DIR/"
+    chmod +x "$CLAUDE_HOOKS_DIR/safety-check.py"
+    echo "  - safety-check.py installed"
 fi
 
-echo "Installing Claude Code Hooks..."
+echo "Configuring Claude Code hooks..."
 mkdir -p "$CLAUDE_DIR"
 
+SACI_HOOKS_FILE="templates/hooks/hooks.json"
+
 if [ -f "$CLAUDE_SETTINGS" ]; then
-    echo "Merging hooks into existing settings.json..."
+    echo "Merging Saci hooks into existing settings.json..."
     if command -v jq >/dev/null 2>&1; then
-        # Create a temporary file for merging
         tmp_settings=$(mktemp)
-        cp "$CLAUDE_SETTINGS" "$tmp_settings"
-        
-        # Merge each hook file
-        for hook_file in templates/hooks/*.json; do
-            echo "  - $(basename "$hook_file")"
-            jq -s '.[0] * .[1]' "$tmp_settings" "$hook_file" > "${tmp_settings}.new"
-            mv "${tmp_settings}.new" "$tmp_settings"
-        done
-        
+        jq -s '.[0] * .[1]' "$CLAUDE_SETTINGS" "$SACI_HOOKS_FILE" > "$tmp_settings"
         mv "$tmp_settings" "$CLAUDE_SETTINGS"
-        echo "Merged successfully."
+        echo "  - Hooks merged successfully"
     else
         echo -e "${RED}⚠️  jq not found! Cannot merge hooks automatically.${NC}"
-        echo "Please manually add the contents of templates/hooks/*.json to $CLAUDE_SETTINGS"
+        echo "Please manually add the contents of $SACI_HOOKS_FILE to $CLAUDE_SETTINGS"
     fi
 else
-    echo "Creating new settings.json with hooks..."
-    # Start with empty object
-    echo "{}" > "$CLAUDE_SETTINGS"
-    
-    # Merge all hooks
-    if command -v jq >/dev/null 2>&1; then
-        tmp_settings=$(mktemp)
-        echo "{}" > "$tmp_settings"
-        
-        for hook_file in templates/hooks/*.json; do
-            jq -s '.[0] * .[1]' "$tmp_settings" "$hook_file" > "${tmp_settings}.new"
-            mv "${tmp_settings}.new" "$tmp_settings"
-        done
-        
-        mv "$tmp_settings" "$CLAUDE_SETTINGS"
-    else
-        echo "jq missing, copying first hook only as fallback"
-        cp templates/hooks/auto-format.json "$CLAUDE_SETTINGS"
-    fi
+    echo "Creating new settings.json with Saci hooks..."
+    cp "$SACI_HOOKS_FILE" "$CLAUDE_SETTINGS"
+    echo "  - settings.json created"
 fi
 
 cp saci.sh "$SACI_LIB_DIR/saci"

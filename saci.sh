@@ -198,11 +198,9 @@ $system_prompt
 **Iteration:** $iteration of $MAX_ITERATIONS
 
 ## Available Skills
-You have access to specialized skills. **Contextually decide** to use them based on the task description:
-- **feature**: For implementing new features, creating files, and architectural work.
-- **verify**: For verification, writing tests, debugging, and fixing broken code.
-- **spec**: **Phase 1** - Defines requirements and generates a Markdown spec.
-- **plan**: **Phase 2** - Converts a spec into an executable `prp.json`.
+- **prp**: For planning new features - generates spec document + `prp.json`.
+
+Refer to guidelines in `default.md` for implementation and debugging best practices.
 
 ## Description
 $description
