@@ -1,28 +1,28 @@
 # 🔥 Saci
 
-**A versão tupiniquim do Ralph**
+**The Brazilian fork of Ralph**
 
-Saci é um loop autônomo que executa o [Amp](https://ampcode.com) repetidamente até completar todas as tasks. Inspirado no [Ralph](https://github.com/snarktank/ralph), com melhorias de resiliência e ferramentas extras.
+Saci is an autonomous loop that runs [Claude Code](https://docs.anthropic.com/en/docs/claude-code) repeatedly until all tasks are complete. Inspired by [Ralph](https://github.com/snarktank/ralph), with resilience improvements and extra tooling.
 
-> Como o Saci Pererê: travesso, ágil, e resolve problemas do seu jeito.
+> Like the Saci Pererê (Brazilian folklore): mischievous, agile, and solves problems its own way.
 
 ## 🆚 Saci vs Ralph
 
 | Feature | Ralph | Saci |
 |---------|-------|------|
-| Loop autônomo | ✅ | ✅ |
-| Nova sessão por task | ✅ | ✅ |
-| Rollback automático (git reset) | ❌ | ✅ |
-| Passa erro anterior pro retry | ❌ | ✅ |
-| Scanner de stack | ❌ | ✅ `saci scan` |
-| Gerador interativo de PRP | ❌ | ✅ `saci init` |
-| Analyzer de patterns | ❌ | ✅ `saci analyze` |
-| Safety hooks | ❌ | ✅ Bloqueia comandos perigosos |
-| Instalação global | ❌ | ✅ Funciona em qualquer dir |
-| Gera AGENTS.md | ❌ | ✅ Auto-detecta contexto |
-| Estrutura de tasks | `userStories[]` flat | `features[].tasks[]` hierárquico |
+| Autonomous loop | ✅ | ✅ |
+| New session per task | ✅ | ✅ |
+| Auto rollback (git reset) | ❌ | ✅ |
+| Pass previous error to retry | ❌ | ✅ |
+| Stack scanner | ❌ | ✅ `saci scan` |
+| Interactive PRP generator | ❌ | ✅ `saci init` |
+| Pattern analyzer | ❌ | ✅ `saci analyze` |
+| Safety hooks | ❌ | ✅ Blocks dangerous commands |
+| Global installation | ❌ | ✅ Works from any directory |
+| Generates AGENTS.md | ❌ | ✅ Auto-detects context |
+| Task structure | `userStories[]` flat | `features[].tasks[]` hierarchical |
 
-## 🚀 Instalação
+## 🚀 Installation
 
 ```bash
 git clone https://github.com/lucianfialho/saci.git
@@ -31,99 +31,99 @@ chmod +x install.sh
 ./install.sh
 ```
 
-Agora você pode usar `saci` em qualquer diretório!
+Now you can use `saci` from any directory!
 
-### Requisitos
+### Requirements
 
-- [Amp CLI](https://ampcode.com) instalado e autenticado
-- `jq` instalado (`brew install jq` no macOS)
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+- `jq` installed (`brew install jq` on macOS)
 - Git
 
-## ⚡ Comandos
+## ⚡ Commands
 
-| Comando | Descrição |
-|---------|-----------|
-| `saci scan` | Detecta stack, gera `prp.json` e `AGENTS.md` |
-| `saci init` | Cria um PRP conversando com você |
-| `saci analyze <file>` | Analisa um arquivo e sugere patterns |
-| `saci run` | Inicia o Loop Autônomo |
+| Command | Description |
+|---------|-------------|
+| `saci scan` | Detects stack, generates `prp.json` and `AGENTS.md` |
+| `saci init` | Creates a PRP interactively |
+| `saci analyze <file>` | Analyzes a file and suggests patterns |
+| `saci run` | Starts the Autonomous Loop |
 
 ## 📝 Workflow
 
 ```bash
-cd meu-projeto
+cd my-project
 
-# 1. Detectar contexto do projeto
+# 1. Detect project context
 saci scan
 
-# 2. Planejar feature (usa skill prp)
-# No Amp: "skill prp" → responde perguntas → gera prp.json
+# 2. Plan feature (uses prp skill)
+# In Claude Code: "skill prp" → answer questions → generates prp.json
 
-# 3. Executar
+# 3. Execute
 saci run
 ```
 
-### Opções do Run
+### Run Options
 
 ```bash
-saci run                    # Executa com defaults
-saci run --dry-run          # Mostra o que faria sem executar
-saci run --prp custom.json  # Usa arquivo PRP diferente
-saci run --max-iter 20      # Máximo de iterações (default: 10)
+saci run                    # Run with defaults
+saci run --dry-run          # Show what would happen without executing
+saci run --prp custom.json  # Use different PRP file
+saci run --max-iter 20      # Max iterations (default: 10)
 ```
 
-## 🧠 Como Funciona
+## 🧠 How It Works
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    SACI LOOP                            │
 ├─────────────────────────────────────────────────────────┤
-│  1. Pega próxima task (passes: false)                   │
-│  2. Cria checkpoint git                                 │
-│  3. Spawna nova sessão Amp (contexto limpo)             │
-│  4. Executa task + roda testes                          │
-│  5. Se passou → commit + marca passes: true             │
-│  6. Se falhou → git reset + guarda erro pro retry       │
-│  7. Repete até completar ou max iterações               │
+│  1. Get next task (passes: false)                       │
+│  2. Create git checkpoint                               │
+│  3. Spawn new Claude Code session (clean context)       │
+│  4. Execute task + run tests                            │
+│  5. If passed → commit + mark passes: true              │
+│  6. If failed → git reset + save error for retry        │
+│  7. Repeat until complete or max iterations             │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Resiliência (o diferencial)
+### Resilience (the differentiator)
 
-- **Nova sessão por task**: Contexto sempre limpo
-- **Rollback automático**: `git reset --hard` se falhar
-- **Feedback de erro**: Erro exato passa pro próximo retry
-- **Memória externa**: `progress.txt` persiste aprendizados
+- **New session per task**: Always clean context
+- **Auto rollback**: `git reset --hard` on failure
+- **Error feedback**: Exact error passed to next retry
+- **External memory**: `progress.txt` persists learnings
 
-## 📁 Estrutura
+## 📁 Structure
 
 ```
 saci/
-├── saci.sh              # Script principal
-├── install.sh           # Instalador global
+├── saci.sh              # Main script
+├── install.sh           # Global installer
 ├── lib/
-│   ├── scanner.sh       # Detecta stack/libs
-│   ├── generator.sh     # Wizard para criar PRP
-│   └── analyzer.sh      # Sugere patterns
+│   ├── scanner.sh       # Detects stack/libs
+│   ├── generator.sh     # Wizard to create PRP
+│   └── analyzer.sh      # Suggests patterns
 └── templates/
-    ├── prompt.md        # Instruções por iteração
-    ├── AGENTS.md        # Template de contexto
+    ├── prompt.md        # Instructions per iteration
+    ├── AGENTS.md        # Context template
     ├── hooks/
     │   ├── hooks.json
     │   └── scripts/
     │       └── safety-check.py
     └── skills/
-        ├── prp/         # Skill para gerar PRP
-        └── default.md   # Guidelines de execução
+        ├── prp/         # Skill to generate PRP
+        └── default.md   # Execution guidelines
 ```
 
-## 📋 Formato do PRP
+## 📋 PRP Format
 
 ```json
 {
   "project": {
-    "name": "MeuApp",
-    "description": "Descrição",
+    "name": "MyApp",
+    "description": "Description",
     "branchName": "saci/feature-name"
   },
   "features": [
@@ -149,30 +149,30 @@ saci/
 }
 ```
 
-## 🎯 Skill PRP
+## 🎯 PRP Skill
 
-O Saci instala uma skill no Claude Code para gerar PRPs:
+Saci installs a skill in Claude Code to generate PRPs:
 
 ```
 > skill prp
-> "Quero adicionar sistema de prioridades"
+> "I want to add a priority system"
 
-[Saci faz perguntas: 1A, 2B, 3C]
+[Saci asks questions: 1A, 2B, 3C]
 > 1A, 2C, 3B
 
-[Gera: tasks/prp-prioridades.md + prp.json]
+[Generates: tasks/prp-priority.md + prp.json]
 ```
 
-## 🌐 Verificação Visual de UI (Opcional)
+## 🌐 Visual UI Verification (Optional)
 
-Para tasks de frontend, você pode usar ferramentas que permitem ao Claude verificar a UI no navegador:
+For frontend tasks, you can use tools that allow Claude to verify UI in the browser:
 
-| Ferramenta | Tipo | Instalação |
-|------------|------|------------|
-| **[Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp)** | MCP Server (Google oficial) | Config no `settings.json` |
+| Tool | Type | Installation |
+|------|------|--------------|
+| **[Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp)** | MCP Server (Google official) | Config in `settings.json` |
 | **[dev-browser](https://github.com/SawyerHood/dev-browser)** | Plugin/Skill | `/plugin install dev-browser` |
 
-**Chrome DevTools MCP** (recomendado):
+**Chrome DevTools MCP** (recommended):
 ```json
 {
   "mcpServers": {
@@ -184,21 +184,21 @@ Para tasks de frontend, você pode usar ferramentas que permitem ao Claude verif
 }
 ```
 
-Com isso, tasks de UI podem ter no acceptance criteria:
-> "Verificar no browser que a mudança funciona"
+With this, UI tasks can have in acceptance criteria:
+> "Verify in browser that the change works"
 
-O Claude abre o navegador, navega, clica, vê erros do console, e valida visualmente.
+Claude opens the browser, navigates, clicks, sees console errors, and validates visually.
 
 ## 🔒 Safety Hook
 
-Bloqueia comandos perigosos antes de executar:
+Blocks dangerous commands before execution:
 
-| Categoria | Exemplos |
-|-----------|----------|
-| **Destrutivos** | `rm -rf /`, `rm -rf ~`, fork bomb |
-| **Arquivos protegidos** | `rm .env`, `rm .git`, `mv prp.json` |
-| **Git perigoso** | `git push --force`, `git reset --hard origin/main` |
-| **Execução remota** | `curl \| bash`, `wget \| sh` |
+| Category | Examples |
+|----------|----------|
+| **Destructive** | `rm -rf /`, `rm -rf ~`, fork bomb |
+| **Protected files** | `rm .env`, `rm .git`, `mv prp.json` |
+| **Dangerous git** | `git push --force`, `git reset --hard origin/main` |
+| **Remote execution** | `curl \| bash`, `wget \| sh` |
 | **Package managers** | `npm publish`, `npm unpublish` |
 | **Database** | `DROP DATABASE`, `DELETE FROM x;` |
 | **Secrets** | `cat .env`, `echo $API_KEY` |
@@ -206,22 +206,22 @@ Bloqueia comandos perigosos antes de executar:
 ## 🐛 Debug
 
 ```bash
-# Ver tasks pendentes
+# See pending tasks
 cat prp.json | jq '.features[].tasks[] | select(.passes == false) | .title'
 
-# Ver progresso
+# See progress
 cat progress.txt
 
 # Dry run
 saci run --dry-run
 ```
 
-## 📚 Referências
+## 📚 References
 
-- [Ralph (inspiração)](https://github.com/snarktank/ralph)
+- [Ralph (inspiration)](https://github.com/snarktank/ralph)
 - [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/)
-- [Amp documentation](https://ampcode.com/manual)
+- [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code)
 
-## 📄 Licença
+## 📄 License
 
 MIT

@@ -45,7 +45,7 @@ prompt_list() {
     local question="$1"
     local items=()
     
-    log_prompt "$question (deixe vazio para terminar)"
+    log_prompt "$question (leave empty to finish)"
     
     while true; do
         echo -n "> "
@@ -66,8 +66,8 @@ generate_feature() {
     local feature_name="$2"
     local feature_desc="$3"
     
-    log_info "Gerando tasks para: $feature_name"
-    log_prompt "Quais tasks essa feature precisa? (deixe vazio para terminar)"
+    log_info "Generating tasks for: $feature_name"
+    log_prompt "What tasks does this feature need? (leave empty to finish)"
     
     local tasks=()
     local task_num=1
@@ -138,23 +138,23 @@ run_generator() {
     echo ""
     
     # Project info
-    local project_name=$(prompt_text "Nome do projeto" "my-project")
-    local project_desc=$(prompt_text "Descreva a ideia do projeto")
+    local project_name=$(prompt_text "Project name" "my-project")
+    local project_desc=$(prompt_text "Describe the project idea")
     
     echo ""
-    log_info "Agora vamos definir as features principais"
-    log_prompt "Quais são as features? (deixe vazio para terminar)"
+    log_info "Now let's define the main features"
+    log_prompt "What are the features? (leave empty to finish)"
     echo ""
     
     local features=()
     local feature_num=1
     
     while true; do
-        echo -n "Feature $feature_num nome> "
+        echo -n "Feature $feature_num name> "
         read -r feature_name
         [ -z "$feature_name" ] && break
         
-        echo -n "Feature $feature_num descrição> "
+        echo -n "Feature $feature_num description> "
         read -r feature_desc
         
         local feature_id="F${feature_num}"
@@ -239,7 +239,7 @@ EOF
     fi
     
     echo ""
-    log_success "PRP gerado: $output_file"
+    log_success "PRP generated: $output_file"
     
     # Copy prompt.md template
     local prompt_template="$script_dir/templates/prompt.md"
@@ -255,10 +255,10 @@ EOF
     log_info "Features: $feature_count"
     log_info "Tasks: $task_count"
     echo ""
-    log_info "Próximos passos:"
-    echo "  1. Execute './saci.sh scan' para detectar stack/libs"
-    echo "  2. Edite $output_file para adicionar acceptance criteria"
-    echo "  3. Execute './saci.sh run' para iniciar"
+    log_info "Next steps:"
+    echo "  1. Run 'saci scan' to detect stack/libs"
+    echo "  2. Edit $output_file to add acceptance criteria"
+    echo "  3. Run 'saci run' to start"
     echo ""
 }
 
