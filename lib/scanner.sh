@@ -363,6 +363,65 @@ run_scan() {
         fi
     fi
      
+    # ========================================================================
+    # Generate CLAUDE.md (Skills)
+    # ========================================================================
+    local claude_template_file="$script_dir/templates/CLAUDE.md"
+    local claude_output_file="CLAUDE.md"
+    
+    if [ -f "$claude_template_file" ] && [ ! -f "$claude_output_file" ]; then
+        log_info "Generating CLAUDE.md (skills)..."
+        
+        # Detect scripts/commands
+        local commands_list=""
+        if [ -f "package.json" ]; then
+             commands_list=$(jq -r '.scripts | to_entries[] | "- \(.key): npm run \(.key)"' package.json 2>/dev/null || echo "")
+        fi
+        
+        # Format stack list
+        local stack_list=$(echo "${stack[@]:-}" | sed 's/ /, /g')
+        
+        # Determine language/framework/test
+        local language="JavaScript"
+        [[ "${stack[*]:-}" == *"TypeScript"* ]] && language="TypeScript"
+        [[ "${stack[*]:-}" == *"Python"* ]] && language="Python"
+        
+        local framework="None"
+        [[ "${stack[*]:-}" == *"Next.js"* ]] && framework="Next.js"
+        [[ "${stack[*]:-}" == *"React"* ]] && framework="React"
+        [[ "${stack[*]:-}" == *"Vue"* ]] && framework="Vue"
+        
+        local test_framework="None"
+        [[ "${stack[*]:-}" == *"Jest"* ]] && test_framework="Jest"
+        [[ "${stack[*]:-}" == *"Vitest"* ]] && test_framework="Vitest"
+        
+        # Replace in template (using perl/awk for safer block replacement or loop)
+        # We'll use simple sed for single lines and loop for block
+        
+        cp "$claude_template_file" "$claude_output_file"
+        
+        sed -i '' "s|{{PROJECT_NAME}}|$project_name|g" "$claude_output_file"
+        sed -i '' "s|{{PROJECT_DESCRIPTION}}|TODO: Add description|g" "$claude_output_file"
+        sed -i '' "s|{{STACK_LIST}}|$stack_list|g" "$claude_output_file"
+        sed -i '' "s|{{LANGUAGE}}|$language|g" "$claude_output_file"
+        sed -i '' "s|{{FRAMEWORK}}|$framework|g" "$claude_output_file"
+        sed -i '' "s|{{TEST_FRAMEWORK}}|$test_framework|g" "$claude_output_file"
+        
+        # Replace commands list (multiline)
+        # Using awk to replace string with file content is safer
+        if [ -n "$commands_list" ]; then
+            echo "$commands_list" > commands.tmp
+            # Replace placeholder with content of temp file
+            # This awk logic replaces the placeholder line with the file content
+            awk 'FNR==NR{a[NR]=$0;next} /{{COMMANDS_LIST}}/{for(i=1;i<=length(a);i++)print a[i];next} 1' commands.tmp "$claude_output_file" > "${claude_output_file}.tmp" && mv "${claude_output_file}.tmp" "$claude_output_file"
+            rm commands.tmp
+        else
+            sed -i '' "s|{{COMMANDS_LIST}}|- build: npm run build\n- test: npm test|g" "$claude_output_file"
+        fi
+        
+        log_success "Created CLAUDE.md with detected commands"
+    fi
+    
     echo ""
     log_success "Scan complete!"
     echo ""

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ $TOOL_EXIT_CODE -eq 0 ] && [[ \"$TOOL_INPUT\" == *\"npm test\"* ]]; then osascript -e 'display notification \"Tests Passed!\" with title \"Saci\"'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

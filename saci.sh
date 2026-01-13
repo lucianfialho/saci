@@ -197,6 +197,11 @@ $system_prompt
 **Task ID:** $task_id
 **Iteration:** $iteration of $MAX_ITERATIONS
 
+## Available Skills
+You have access to specialized skills. **Contextually decide** to use them based on the task description:
+- **saci-feature**: For implementing new features, creating files, and architectural work.
+- **saci-verify**: For verification, writing tests, debugging, and fixing broken code.
+
 ## Description
 $description
 

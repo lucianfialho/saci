@@ -19,7 +19,7 @@ Agora você pode usar o comando `saci` em qualquer diretório!
 
 | Comando | Descrição |
 |---------|-----------|
-| `saci scan` | **(Novo)** Detecta stack, pastas e libs do seu projeto automaticamente |
+| `saci scan` | **(Novo)** Detecta stack, gera `prp.json` e `CLAUDE.md` (skills) automaticamente |
 | `saci init` | **(Novo)** Cria um arquivo PRP conversando com você |
 | `saci analyze <file>` | **(Novo)** Analisa um arquivo e sugere patterns/hints |
 | `saci run` | Inicia o Loop Autônomo (Real Ralph) |
