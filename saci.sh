@@ -201,6 +201,7 @@ $system_prompt
 You have access to specialized skills. **Contextually decide** to use them based on the task description:
 - **feature**: For implementing new features, creating files, and architectural work.
 - **verify**: For verification, writing tests, debugging, and fixing broken code.
+- **planner**: For creating project plans and generating `prp.json` files.
 
 ## Description
 $description
