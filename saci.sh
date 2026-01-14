@@ -20,6 +20,7 @@ PRP_FILE="${PRP_FILE:-prp.json}"
 PROGRESS_FILE="${PROGRESS_FILE:-progress.txt}"
 MAX_ITERATIONS="${MAX_ITERATIONS:-10}"
 DRY_RUN="${DRY_RUN:-false}"
+CLI_PROVIDER="${CLI_PROVIDER:-claude}"  # Options: claude, amp
 
 # Determine PROMPT_FILE
 # 1. Environment variable
@@ -67,7 +68,20 @@ check_dependencies() {
     local missing=()
     
     command -v jq >/dev/null 2>&1 || missing+=("jq")
-    command -v claude >/dev/null 2>&1 || missing+=("claude (npm install -g @anthropic-ai/claude-code)")
+    
+    # Check for selected CLI provider
+    case "$CLI_PROVIDER" in
+        claude)
+            command -v claude >/dev/null 2>&1 || missing+=("claude (npm install -g @anthropic-ai/claude-code)")
+            ;;
+        amp)
+            command -v amp >/dev/null 2>&1 || missing+=("amp (https://ampcode.com)")
+            ;;
+        *)
+            log_error "Unknown CLI provider: $CLI_PROVIDER. Valid options: claude, amp"
+            exit 1
+            ;;
+    esac
     
     if [ ${#missing[@]} -gt 0 ]; then
         log_error "Missing dependencies: ${missing[*]}"
@@ -288,13 +302,24 @@ run_single_iteration() {
     local prompt_file=$(mktemp)
     echo "$prompt" > "$prompt_file"
     
-    log_info "Spawning NEW Claude Code session (fresh context window)..."
+    log_info "Spawning NEW $CLI_PROVIDER session (fresh context window)..."
     
-    # Capture Claude output for potential debugging
-    local claude_output_file=$(mktemp)
+    # Capture output for potential debugging
+    local cli_output_file=$(mktemp)
     
-    # Run Claude Code with the prompt - this starts a NEW session
-    if cat "$prompt_file" | claude --print 2>&1 | tee "$claude_output_file"; then
+    # Build the CLI command based on provider
+    local cli_cmd
+    case "$CLI_PROVIDER" in
+        claude)
+            cli_cmd="claude --print"
+            ;;
+        amp)
+            cli_cmd="amp --execute"
+            ;;
+    esac
+    
+    # Run CLI with the prompt - this starts a NEW session
+    if cat "$prompt_file" | $cli_cmd 2>&1 | tee "$cli_output_file"; then
         rm -f "$prompt_file"
         
         # Run tests and CAPTURE the output
@@ -304,7 +329,7 @@ run_single_iteration() {
         if eval "$test_cmd" 2>&1 | tee "$test_output_file"; then
             # Tests passed!
             log_success "Tests passed!"
-            rm -f "$test_output_file" "$claude_output_file"
+            rm -f "$test_output_file" "$cli_output_file"
             
             # Commit changes
             git add -A 2>/dev/null || true
@@ -356,12 +381,12 @@ $test_output
 \`\`\`
 **Action:** Rolled back changes, will retry with error context
 "
-            rm -f "$claude_output_file"
+            rm -f "$cli_output_file"
             return 1
         fi
     else
-        rm -f "$prompt_file" "$claude_output_file"
-        log_error "Claude Code session failed"
+        rm -f "$prompt_file" "$cli_output_file"
+        log_error "$CLI_PROVIDER session failed"
         
         # Rollback on Claude failure too
         if [ -n "$git_checkpoint" ]; then
@@ -435,14 +460,16 @@ main() {
             --dry-run) DRY_RUN=true; shift ;;
             --prp) PRP_FILE="$2"; shift 2 ;;
             --max-iter) MAX_ITERATIONS="$2"; shift 2 ;;
+            --provider) CLI_PROVIDER="$2"; shift 2 ;;
             --help) 
                 echo "Usage: saci.sh [OPTIONS]"
                 echo ""
                 echo "Options:"
-                echo "  --dry-run      Show what would be done without executing"
-                echo "  --prp FILE     Use specified PRP file (default: prp.json)"
-                echo "  --max-iter N   Max iterations per task (default: 10)"
-                echo "  --help         Show this help"
+                echo "  --dry-run        Show what would be done without executing"
+                echo "  --prp FILE       Use specified PRP file (default: prp.json)"
+                echo "  --max-iter N     Max iterations per task (default: 10)"
+                echo "  --provider NAME  CLI provider: claude or amp (default: claude)"
+                echo "  --help           Show this help"
                 exit 0
                 ;;
             *) shift ;;
@@ -538,16 +565,21 @@ show_help() {
     echo "  run               Execute the Ralph loop (default)"
     echo ""
     echo "Run Options:"
-    echo "  --dry-run         Show what would be done without executing"
-    echo "  --prp FILE        Use specified PRP file (default: prp.json)"
-    echo "  --max-iter N      Max iterations per task (default: 10)"
+    echo "  --dry-run           Show what would be done without executing"
+    echo "  --prp FILE          Use specified PRP file (default: prp.json)"
+    echo "  --max-iter N        Max iterations per task (default: 10)"
+    echo "  --provider NAME     CLI provider: claude or amp (default: claude)"
+    echo ""
+    echo "Environment Variables:"
+    echo "  CLI_PROVIDER        Set default provider (claude or amp)"
     echo ""
     echo "Examples:"
-    echo "  ./saci.sh scan                    # Detect stack and libs"
-    echo "  ./saci.sh init                    # Create PRP interactively"
-    echo "  ./saci.sh analyze src/Button.tsx  # Analyze patterns"
-    echo "  ./saci.sh run --dry-run           # Test run"
-    echo "  ./saci.sh run                     # Execute tasks"
+    echo "  ./saci.sh scan                       # Detect stack and libs"
+    echo "  ./saci.sh init                       # Create PRP interactively"
+    echo "  ./saci.sh analyze src/Button.tsx     # Analyze patterns"
+    echo "  ./saci.sh run --dry-run              # Test run"
+    echo "  ./saci.sh run --provider amp         # Use Amp instead of Claude"
+    echo "  ./saci.sh run                        # Execute tasks"
     echo ""
 }
 
