@@ -329,6 +329,14 @@ run_single_iteration() {
         # ================================================================
         local changed_files=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
         if [ "$changed_files" -eq 0 ]; then
+            # Check if task was already marked as complete (AI may have updated prp.json)
+            local task_status=$(jq -r --arg id "$task_id" '.features[].tasks[] | select(.id == $id) | .passes' "$PRP_FILE")
+            if [ "$task_status" = "true" ]; then
+                log_success "Task already marked as complete - skipping to next"
+                rm -f "$cli_output_file"
+                return 0
+            fi
+            
             log_warning "No files were modified - AI did not make any changes"
             LAST_ERROR="No files were modified. The AI session completed but did not create or edit any files. Please ensure you actually create/modify the required files."
             rm -f "$cli_output_file"
