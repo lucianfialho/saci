@@ -1,0 +1,11 @@
+{
+  "project": {
+    "name": "{{PROJECT_NAME}}",
+    "description": "{{PROJECT_DESCRIPTION}}",
+    "stack": {{STACK_JSON}},
+    "paths": {{PATHS_JSON}},
+    "detected_libraries": {{LIBS_JSON}}
+  },
+  "features": [{{FEATURES_JSON}}
+  ]
+}

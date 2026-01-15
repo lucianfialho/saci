@@ -1,8 +1,12 @@
-# Saci Runtime Files
+# Saci Runtime Files (in user projects, not templates)
 progress.txt
-prp.json
-prompt.md
+/prp.json
+/prompt.md
 features.tmp
+
+# Keep template files
+!templates/prp.json
+!templates/prompt.md
 
 # Logs and Temp
 *.log
