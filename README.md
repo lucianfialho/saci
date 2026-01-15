@@ -55,7 +55,7 @@ cd saci
 | `saci init` | Creates a PRP interactively |
 | `saci analyze <file>` | Analyzes a file and suggests patterns |
 | `saci reset [task-id]` | Resets all tasks (or specific task) to `passes: false` |
-| `saci run` | Starts the Autonomous Loop |
+| `saci jump` | Starts the Autonomous Loop |
 
 ## Workflow
 
@@ -69,17 +69,17 @@ saci scan
 # In Claude Code: "skill prp" → answer questions → generates prp.json
 
 # 3. Execute
-saci run
+saci jump
 ```
 
-### Run Options
+### Jump Options
 
 ```bash
-saci run                    # Run with defaults
-saci run --tui              # Enable visual TUI mode (requires gum)
-saci run --dry-run          # Show what would happen without executing
-saci run --prp custom.json  # Use different PRP file
-saci run --max-iter 20      # Max iterations (default: 10)
+saci jump                    # Jump with defaults
+saci jump --tui              # Enable visual TUI mode (requires gum)
+saci jump --dry-run          # Show what would happen without executing
+saci jump --prp custom.json  # Use different PRP file
+saci jump --max-iter 20      # Max iterations (default: 10)
 ```
 
 ## How It Works
@@ -222,8 +222,8 @@ cat prp.json | jq '.features[].tasks[] | select(.passes == false) | .title'
 # See progress
 cat progress.txt
 
-# Dry run
-saci run --dry-run
+# Dry jump
+saci jump --dry-run
 
 # Reset all tasks to retry
 saci reset

@@ -683,9 +683,9 @@ show_help() {
     echo "  analyze <file>    Analyze a file and suggest patterns/hints"
     echo "  reset [task-id]   Reset all tasks (or specific task) to passes: false"
     echo "  status            Show task progress with nice TUI (requires gum)"
-    echo "  run               Execute the Ralph loop (default)"
+    echo "  jump              Execute the Ralph loop (default)"
     echo ""
-    echo "Run Options:"
+    echo "Jump Options:"
     echo "  --dry-run           Show what would be done without executing"
     echo "  --prp FILE          Use specified PRP file (default: prp.json)"
     echo "  --max-iter N        Max iterations per task (default: 10)"
@@ -698,14 +698,14 @@ show_help() {
     echo "  ./saci.sh scan                       # Detect stack and libs"
     echo "  ./saci.sh init                       # Create PRP interactively"
     echo "  ./saci.sh analyze src/Button.tsx     # Analyze patterns"
-    echo "  ./saci.sh run --dry-run              # Test run"
-    echo "  ./saci.sh run --provider amp         # Use Amp instead of Claude"
-    echo "  ./saci.sh run                        # Execute tasks"
+    echo "  ./saci.sh jump --dry-run              # Test run"
+    echo "  ./saci.sh jump --provider amp         # Use Amp instead of Claude"
+    echo "  ./saci.sh jump                        # Execute tasks"
     echo ""
 }
 
 # Main entry point with subcommand routing
-case "${1:-run}" in
+case "${1:-jump}" in
     scan)
         source "$SCRIPT_DIR/lib/scanner.sh"
         shift
@@ -730,7 +730,7 @@ case "${1:-run}" in
         shift
         show_status "${1:-prp.json}"
         ;;
-    run)
+    jump)
         shift 2>/dev/null || true
         main "$@"
         ;;
@@ -738,7 +738,7 @@ case "${1:-run}" in
         show_help
         ;;
     *)
-        # If first arg is an option, assume 'run' command
+        # If first arg is an option, assume 'jump' command
         if [[ "${1:-}" == --* ]]; then
             main "$@"
         else
