@@ -1,0 +1,89 @@
+# Progress reset at 2026-01-15 19:45:32
+
+## Codebase Patterns
+- Use jq with `// []` and `// "all"` for backward-compatible field extraction
+- All task helper functions follow consistent pattern: jq -r --arg id "$task_id" selecting from .features[].tasks[]
+- Dependency functions use while IFS= read loops to iterate over multi-line jq output
+
+## [2026-01-15 19:52:15] - F1-T1
+- Implemented four dependency helper functions in saci.sh
+- get_task_dependencies() extracts dependency IDs using jq (lines 214-220)
+- get_dependency_mode() returns 'all' or 'any' with default 'all' (lines 222-228)
+- check_dependencies_met() validates dependencies based on mode (lines 230-266)
+- get_blocked_dependencies() returns list of incomplete dependencies (lines 268-297)
+- Files changed: saci.sh
+- **Learnings for future iterations:**
+  - Functions were already implemented in a previous iteration and committed as fdc5cae
+  - The task needed the PRP to be updated to reflect completion
+  - All four functions use consistent jq patterns matching existing helper functions
+  - Functions properly handle missing fields with `// []` and `// "all"` fallbacks for backward compatibility
+  - The check_dependencies_met() function correctly implements both 'all' (all deps must pass) and 'any' (at least one dep must pass) modes
+  - For 'all' mode: all dependencies must have passes=true
+  - For 'any' mode: at least one dependency must have passes=true
+---
+
+## [2026-01-15 20:15:00] - F1-T2
+- Task was already implemented in a previous iteration (commit 304706f)
+- The get_next_task() function (lines 124-152) correctly implements dependency checking
+- Implementation details:
+  - Gets candidates sorted by priority (lines 127-132)
+  - Iterates through candidates using while loop (lines 140-148)
+  - Calls check_dependencies_met() for each candidate (line 144)
+  - Returns first task with satisfied dependencies (line 145)
+  - Returns empty if no tasks have satisfied dependencies (line 151)
+- Files changed: prp.json (marked task as complete)
+- **Learnings for future iterations:**
+  - This task was already complete from commit 304706f but PRP wasn't updated
+  - The implementation correctly handles all acceptance criteria:
+    - Tasks without dependencies selected normally (check_dependencies_met returns 0 for empty deps)
+    - Tasks with unsatisfied dependencies are skipped (continue loop if check fails)
+    - Tasks with satisfied dependencies are selected (first to pass check)
+    - Priority order respected (candidates sorted by priority before iteration)
+    - Backward compatible (helper functions handle missing fields)
+  - When a task appears incomplete but code is already correct, verify the implementation and just update the PRP
+  - The get_next_task() function is critical to the dependency system - it's the gatekeeper that prevents tasks from running before their dependencies are met
+---
+
+## [2026-01-15 20:25:30] - F1-T3
+- Task was already implemented in a previous iteration (commit 67215ea)
+- The detect_circular_dependency() function (lines 303-348) implements DFS-based cycle detection
+- The validate_dependencies() function (lines 350-382) validates all tasks with dependencies
+- Implementation details:
+  - detect_circular_dependency() uses recursive DFS with visited tracking (lines 303-348)
+  - Path tracking builds full cycle path for error reporting (lines 308-313)
+  - Cycle detection checks if task_id appears in visited list (lines 316-320)
+  - Recursively checks all dependencies of each task (lines 334-344)
+  - validate_dependencies() called in main() after PRP file check (line 759)
+  - Exits with error code 1 if circular dependency detected (lines 759-762)
+- Files changed: prp.json (marked task as complete)
+- **Learnings for future iterations:**
+  - This task was already complete from commit 67215ea but PRP wasn't updated
+  - The implementation correctly handles all acceptance criteria:
+    - Detects simple cycles (A->B->A) via visited list check
+    - Detects long cycles (A->B->C->A) via recursive DFS
+    - No false positives on valid DAGs (returns 0 when no cycle found)
+    - Logs full cycle path using path parameter (e.g., "F1-T1 -> F1-T2 -> F1-T1")
+    - Exits with error in main() if validation fails
+    - Passes bash -n syntax check
+  - The circular dependency detection is a critical safety feature that prevents infinite loops in the task execution system
+  - When a task appears incomplete but code is already correct, verify the implementation matches acceptance criteria and update the PRP
+---
+
+## [2026-01-15 21:35:00] - F1-T4
+- Modified lib/generator.sh generate_feature() function to ask about dependencies
+- Implementation details:
+  - Added dependency prompt after task title input (line 83)
+  - Parses comma-separated input using jq: `split(",") | map(gsub("^\\s+|\\s+$";""))` (line 92)
+  - Empty input defaults to empty array [] (line 87)
+  - Only asks for dependency mode if dependencies are provided (lines 90-101)
+  - Defaults to 'all' mode if not specified (lines 88, 98-100)
+  - Adds dependencies and dependencyMode fields to task JSON (lines 110-111)
+- Files changed: lib/generator.sh (lines 75-124)
+- **Learnings for future iterations:**
+  - The generator wizard now fully supports the dependency system
+  - Using jq -R for string processing makes parsing comma-separated values clean and robust
+  - The pattern `if [ -n "$input" ]` ensures we only prompt for mode when needed, improving UX
+  - The generator creates tasks with backward-compatible defaults (empty deps array, 'all' mode)
+  - Future tasks created via the generator will automatically include dependency fields
+  - The jq trim pattern `gsub("^\\s+|\\s+$";"")` handles whitespace in user input gracefully
+---
