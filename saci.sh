@@ -297,6 +297,91 @@ get_blocked_dependencies() {
 }
 
 # ============================================================================
+# Circular Dependency Detection
+# ============================================================================
+
+detect_circular_dependency() {
+    local task_id="$1"
+    local path="${2:-}"  # Current path for cycle detection
+    local visited="${3:-}"  # Space-separated list of visited nodes
+
+    # Add current task to path
+    if [ -z "$path" ]; then
+        path="$task_id"
+    else
+        path="$path -> $task_id"
+    fi
+
+    # Check if we've visited this node before (cycle detected)
+    if echo " $visited " | grep -q " $task_id "; then
+        # Cycle detected! Return the full path
+        echo "$path"
+        return 1
+    fi
+
+    # Add to visited list
+    visited="$visited $task_id"
+
+    # Get dependencies of current task
+    local dependencies=$(get_task_dependencies "$task_id")
+
+    # If no dependencies, no cycle from this path
+    if [ -z "$dependencies" ]; then
+        return 0
+    fi
+
+    # Check each dependency recursively
+    while IFS= read -r dep_id; do
+        [ -z "$dep_id" ] && continue
+
+        # Recursively check this dependency
+        local cycle_path
+        if ! cycle_path=$(detect_circular_dependency "$dep_id" "$path" "$visited"); then
+            # Cycle detected in recursive call
+            echo "$cycle_path"
+            return 1
+        fi
+    done <<< "$dependencies"
+
+    # No cycle found from this task
+    return 0
+}
+
+validate_dependencies() {
+    local prp_file="${1:-$PRP_FILE}"
+
+    log_info "Validating task dependencies..."
+
+    # Get all tasks with dependencies
+    local tasks_with_deps=$(jq -r '
+        .features[].tasks[] |
+        select(.dependencies != null and (.dependencies | length) > 0) |
+        .id
+    ' "$prp_file")
+
+    # If no tasks have dependencies, nothing to validate
+    if [ -z "$tasks_with_deps" ]; then
+        log_success "No task dependencies to validate"
+        return 0
+    fi
+
+    # Check each task for circular dependencies
+    while IFS= read -r task_id; do
+        [ -z "$task_id" ] && continue
+
+        local cycle_path
+        if ! cycle_path=$(detect_circular_dependency "$task_id" "" ""); then
+            log_error "Circular dependency detected!"
+            log_error "Cycle path: $cycle_path"
+            return 1
+        fi
+    done <<< "$tasks_with_deps"
+
+    log_success "No circular dependencies found"
+    return 0
+}
+
+# ============================================================================
 # Prompt Builder
 # ============================================================================
 
@@ -669,7 +754,13 @@ main() {
         log_info "Create a prp.json file or specify with --prp"
         exit 1
     fi
-    
+
+    # Validate dependencies (detect circular dependencies)
+    if ! validate_dependencies "$PRP_FILE"; then
+        log_error "Dependency validation failed. Please fix circular dependencies before running."
+        exit 1
+    fi
+
     # Initialize progress file
     if [ ! -f "$PROGRESS_FILE" ]; then
         cat > "$PROGRESS_FILE" <<EOF
