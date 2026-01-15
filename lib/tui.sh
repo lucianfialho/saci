@@ -12,6 +12,10 @@ CYAN='\033[0;36m'
 DIM='\033[2m'
 NC='\033[0m'
 
+# TUI State
+TUI_LOG_FILE=""
+TUI_ENABLED=false
+
 # Check if gum is installed
 check_gum() {
     if ! command -v gum &> /dev/null; then
@@ -22,210 +26,192 @@ check_gum() {
         echo "  apt install gum       # Debian/Ubuntu"
         echo ""
         echo "Or see: https://github.com/charmbracelet/gum#installation"
-        exit 1
+        return 1
     fi
+    return 0
 }
 
 # ============================================================================
-# Task Display Components
+# TUI Components
 # ============================================================================
 
+tui_init() {
+    TUI_ENABLED=true
+    TUI_LOG_FILE=$(mktemp)
+    clear
+}
+
+tui_cleanup() {
+    [ -f "$TUI_LOG_FILE" ] && rm -f "$TUI_LOG_FILE"
+}
+
+tui_log() {
+    local message="$1"
+    local timestamp=$(date '+%H:%M:%S')
+    echo "[$timestamp] $message" >> "$TUI_LOG_FILE"
+}
+
 # Generate task list with status icons
-generate_task_list() {
+tui_task_list() {
     local prp_file="$1"
     local current_task="$2"
     
     jq -r --arg current "$current_task" '
         .features[] | .tasks[] | 
         if .id == $current then
-            "▶ \(.id): \(.title)"
+            "▶ \(.id) \(.title[0:25])"
         elif .passes == true then
-            "■ \(.id): \(.title)"
+            "■ \(.id) \(.title[0:25])"
         else
-            "□ \(.id): \(.title)"
+            "□ \(.id) \(.title[0:25])"
         end
-    ' "$prp_file"
+    ' "$prp_file" 2>/dev/null
 }
 
-# Create styled task panel
-render_task_panel() {
+# Render the full TUI
+tui_render() {
     local prp_file="$1"
     local current_task="$2"
-    local width="${3:-30}"
+    local status="${3:-running}"
     
-    local completed=$(jq '[.features[].tasks[] | select(.passes == true)] | length' "$prp_file")
-    local total=$(jq '[.features[].tasks[]] | length' "$prp_file")
-    local percent=$((completed * 100 / total))
+    [ "$TUI_ENABLED" != "true" ] && return
     
-    # Build progress bar
+    local completed=$(jq '[.features[].tasks[] | select(.passes == true)] | length' "$prp_file" 2>/dev/null || echo 0)
+    local total=$(jq '[.features[].tasks[]] | length' "$prp_file" 2>/dev/null || echo 0)
+    local percent=0
+    [ "$total" -gt 0 ] && percent=$((completed * 100 / total))
+    
+    # Progress bar
     local bar_width=20
-    local filled=$((completed * bar_width / total))
+    local filled=0
+    [ "$total" -gt 0 ] && filled=$((completed * bar_width / total))
     local empty=$((bar_width - filled))
-    local progress_bar=$(printf '█%.0s' $(seq 1 $filled 2>/dev/null) || echo "")
-    progress_bar+=$(printf '░%.0s' $(seq 1 $empty 2>/dev/null) || echo "")
+    local progress_bar=""
+    for ((i=0; i<filled; i++)); do progress_bar+="█"; done
+    for ((i=0; i<empty; i++)); do progress_bar+="░"; done
     
     # Task list
-    local tasks=$(generate_task_list "$prp_file" "$current_task")
+    local tasks=$(tui_task_list "$prp_file" "$current_task")
     
-    # Combine into panel
-    echo "Tasks ($completed/$total)"
-    echo ""
-    echo "$tasks"
-    echo ""
-    echo "$progress_bar $percent%"
-}
+    # Build left panel content
+    local left_content="Tasks ($completed/$total)
 
-# Create styled log panel
-render_log_panel() {
-    local log_file="$1"
-    local height="${2:-15}"
-    
-    if [ -f "$log_file" ]; then
-        tail -n "$height" "$log_file"
-    else
-        echo "Waiting for logs..."
-    fi
-}
+$tasks
 
-# ============================================================================
-# Main TUI Runner
-# ============================================================================
+$progress_bar $percent%"
 
-run_tui() {
-    local prp_file="${1:-prp.json}"
-    local log_file=$(mktemp)
-    local current_task=""
+    # Build right panel content (last 10 log lines)
+    local right_content="Log
+
+$(tail -10 "$TUI_LOG_FILE" 2>/dev/null || echo 'Starting...')"
+
+    # Style panels
+    local left_panel=$(echo "$left_content" | gum style \
+        --border normal \
+        --border-foreground 212 \
+        --padding "1 2" \
+        --width 35)
     
-    check_gum
+    local right_panel=$(echo "$right_content" | gum style \
+        --border normal \
+        --border-foreground 240 \
+        --padding "1 2" \
+        --width 50)
     
-    # Clear screen
+    # Clear and render
     clear
     
     # Header
     gum style \
         --foreground 212 \
-        --border-foreground 212 \
-        --border double \
-        --align center \
-        --width 60 \
-        --margin "1 2" \
-        --padding "1 2" \
-        "🔥 SACI - Autonomous Coding Loop" \
-        "Press Ctrl+C to stop"
+        --bold \
+        "🔥 SACI - Autonomous Coding Loop"
     
     echo ""
     
-    # Get first task
-    current_task=$(jq -r '[.features[].tasks[] | select(.passes == false)][0].id // empty' "$prp_file")
+    # Panels side by side
+    gum join --horizontal "$left_panel" "$right_panel"
     
-    if [ -z "$current_task" ]; then
-        gum style --foreground 10 "✓ All tasks completed!"
-        rm -f "$log_file"
-        return 0
-    fi
-    
-    # Main loop - render panels side by side
-    while [ -n "$current_task" ]; do
-        # Render task panel
-        local task_panel=$(render_task_panel "$prp_file" "$current_task" | gum style \
-            --border normal \
-            --border-foreground 240 \
-            --padding "1 2" \
-            --width 35)
-        
-        # Render log panel
-        local log_panel=$(render_log_panel "$log_file" 12 | gum style \
-            --border normal \
-            --border-foreground 240 \
-            --padding "1 2" \
-            --width 50)
-        
-        # Join panels horizontally
-        clear
-        gum join --horizontal "$task_panel" "$log_panel"
-        
-        # Get task info
-        local title=$(jq -r --arg id "$current_task" '.features[].tasks[] | select(.id == $id) | .title' "$prp_file")
-        local test_cmd=$(jq -r --arg id "$current_task" '.features[].tasks[] | select(.id == $id) | .tests.command // "npm test"' "$prp_file")
-        
-        # Log current task
-        echo "[$(date '+%H:%M:%S')] Starting: $title" >> "$log_file"
-        
-        # Run task with spinner
-        echo "[$(date '+%H:%M:%S')] Spawning Claude..." >> "$log_file"
-        
-        # Simulate task execution (replace with actual execution)
-        # In real implementation, this would call run_single_iteration
-        gum spin --spinner dot --title "Running $current_task..." -- sleep 2
-        
-        # Check result (simulated)
-        echo "[$(date '+%H:%M:%S')] ✓ Task completed" >> "$log_file"
-        
-        # Mark complete (simulated)
-        local tmp_file=$(mktemp)
-        jq --arg id "$current_task" '
-            .features |= map(.tasks |= map(if .id == $id then .passes = true else . end))
-        ' "$prp_file" > "$tmp_file" && mv "$tmp_file" "$prp_file"
-        
-        # Get next task
-        current_task=$(jq -r '[.features[].tasks[] | select(.passes == false)][0].id // empty' "$prp_file")
-        
-        sleep 1
-    done
-    
-    # Final render
-    clear
-    local task_panel=$(render_task_panel "$prp_file" "" | gum style \
-        --border normal \
-        --border-foreground 10 \
-        --padding "1 2" \
-        --width 35)
-    
-    local log_panel=$(render_log_panel "$log_file" 12 | gum style \
-        --border normal \
-        --border-foreground 10 \
-        --padding "1 2" \
-        --width 50)
-    
-    gum join --horizontal "$task_panel" "$log_panel"
-    
+    # Status bar
     echo ""
-    gum style --foreground 10 --bold "🎉 All tasks completed!"
-    
-    rm -f "$log_file"
+    case "$status" in
+        running)
+            gum style --foreground 33 "⟳ Running task $current_task..."
+            ;;
+        success)
+            gum style --foreground 10 "✓ Task $current_task completed!"
+            ;;
+        failed)
+            gum style --foreground 9 "✗ Task $current_task failed, retrying..."
+            ;;
+        complete)
+            gum style --foreground 10 --bold "🎉 All tasks completed!"
+            ;;
+    esac
 }
 
 # ============================================================================
-# Interactive Task Picker
+# TUI-aware logging functions (replace standard ones when TUI is active)
 # ============================================================================
 
-pick_task() {
-    local prp_file="${1:-prp.json}"
-    
-    check_gum
-    
-    local tasks=$(jq -r '.features[].tasks[] | "\(.id): \(.title) [\(if .passes then "✓" else "○" end)]"' "$prp_file")
-    
-    if [ -z "$tasks" ]; then
-        echo "No tasks found in $prp_file"
-        return 1
+tui_log_info() {
+    local message="$1"
+    if [ "$TUI_ENABLED" = "true" ]; then
+        tui_log "$message"
+    else
+        echo -e "${BLUE}[SACI]${NC} $message"
     fi
-    
-    local selected=$(echo "$tasks" | gum filter --placeholder "Select a task...")
-    
-    if [ -n "$selected" ]; then
-        echo "${selected%%:*}"
+}
+
+tui_log_success() {
+    local message="$1"
+    if [ "$TUI_ENABLED" = "true" ]; then
+        tui_log "✓ $message"
+    else
+        echo -e "${GREEN}[✓]${NC} $message"
+    fi
+}
+
+tui_log_warning() {
+    local message="$1"
+    if [ "$TUI_ENABLED" = "true" ]; then
+        tui_log "⚠ $message"
+    else
+        echo -e "${YELLOW}[!]${NC} $message"
+    fi
+}
+
+tui_log_error() {
+    local message="$1"
+    if [ "$TUI_ENABLED" = "true" ]; then
+        tui_log "✗ $message"
+    else
+        echo -e "${RED}[✗]${NC} $message"
+    fi
+}
+
+tui_log_iteration() {
+    local message="$1"
+    if [ "$TUI_ENABLED" = "true" ]; then
+        tui_log "→ $message"
+    else
+        echo -e "${CYAN}[ITER]${NC} $message"
     fi
 }
 
 # ============================================================================
-# Styled Status Display
+# Styled Status Display (standalone)
 # ============================================================================
 
 show_status() {
     local prp_file="${1:-prp.json}"
     
-    check_gum
+    if ! check_gum; then
+        # Fallback without gum
+        echo "=== SACI Status ==="
+        jq -r '.features[].tasks[] | "\(if .passes then "✓" else "○" end) \(.id): \(.title)"' "$prp_file"
+        return
+    fi
     
     local project_name=$(jq -r '.project.name // "Unknown"' "$prp_file")
     local completed=$(jq '[.features[].tasks[] | select(.passes == true)] | length' "$prp_file")
@@ -249,9 +235,10 @@ show_status() {
     # Progress
     local bar_width=30
     local filled=$((total > 0 ? completed * bar_width / total : 0))
-    local progress_bar=$(printf '█%.0s' $(seq 1 $filled 2>/dev/null) || echo "")
+    local progress_bar=""
+    for ((i=0; i<filled; i++)); do progress_bar+="█"; done
     local remaining=$((bar_width - filled))
-    progress_bar+=$(printf '░%.0s' $(seq 1 $remaining 2>/dev/null) || echo "")
+    for ((i=0; i<remaining; i++)); do progress_bar+="░"; done
     
     gum style --foreground 212 "Progress: $progress_bar $completed/$total ($percent%)"
     
@@ -260,21 +247,43 @@ show_status() {
     # Task list
     jq -r '.features[] | .tasks[] | 
         if .passes == true then
-            "  \u001b[32m■\u001b[0m \(.id): \(.title)"
+            "  ✓ \(.id): \(.title)"
         else
-            "  \u001b[90m□\u001b[0m \(.id): \(.title)"
+            "  ○ \(.id): \(.title)"
         end
     ' "$prp_file"
     
     echo ""
 }
 
+# ============================================================================
+# Interactive Task Picker
+# ============================================================================
+
+pick_task() {
+    local prp_file="${1:-prp.json}"
+    
+    check_gum || return 1
+    
+    local tasks=$(jq -r '.features[].tasks[] | "\(.id): \(.title) [\(if .passes then "✓" else "○" end)]"' "$prp_file")
+    
+    if [ -z "$tasks" ]; then
+        echo "No tasks found in $prp_file"
+        return 1
+    fi
+    
+    local selected=$(echo "$tasks" | gum filter --placeholder "Select a task...")
+    
+    if [ -n "$selected" ]; then
+        echo "${selected%%:*}"
+    fi
+}
+
 # Run if called directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     case "${1:-status}" in
-        run) run_tui "${2:-prp.json}" ;;
-        pick) pick_task "${2:-prp.json}" ;;
         status) show_status "${2:-prp.json}" ;;
-        *) echo "Usage: tui.sh [run|pick|status] [prp.json]" ;;
+        pick) pick_task "${2:-prp.json}" ;;
+        *) echo "Usage: tui.sh [status|pick] [prp.json]" ;;
     esac
 fi

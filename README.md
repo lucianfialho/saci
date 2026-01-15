@@ -45,6 +45,7 @@ cd saci
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
 - `jq` installed (`brew install jq` on macOS)
 - Git
+- `gum` (optional, for TUI mode - `brew install gum` on macOS)
 
 ## ⚡ Commands
 
@@ -75,6 +76,7 @@ saci run
 
 ```bash
 saci run                    # Run with defaults
+saci run --tui              # Enable visual TUI mode (requires gum)
 saci run --dry-run          # Show what would happen without executing
 saci run --prp custom.json  # Use different PRP file
 saci run --max-iter 20      # Max iterations (default: 10)

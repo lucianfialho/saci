@@ -21,6 +21,8 @@ PROGRESS_FILE="${PROGRESS_FILE:-progress.txt}"
 MAX_ITERATIONS="${MAX_ITERATIONS:-10}"
 DRY_RUN="${DRY_RUN:-false}"
 CLI_PROVIDER="${CLI_PROVIDER:-claude}"  # Options: claude, amp
+TUI_MODE="${TUI_MODE:-false}"  # Enable TUI with gum
+TUI_ENABLED="${TUI_ENABLED:-false}"  # Set by tui_init when gum is ready
 
 # Determine PROMPT_FILE
 # 1. Environment variable
@@ -43,11 +45,41 @@ fi
 # Helper Functions
 # ============================================================================
 
-log_info() { echo -e "${BLUE}[SACI]${NC} $1"; }
-log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
-log_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
-log_error() { echo -e "${RED}[✗]${NC} $1"; }
-log_iteration() { echo -e "${CYAN}[ITER]${NC} $1"; }
+log_info() { 
+    if [ "$TUI_MODE" = "true" ] && [ "$TUI_ENABLED" = "true" ]; then
+        tui_log "$1"
+    else
+        echo -e "${BLUE}[SACI]${NC} $1"
+    fi
+}
+log_success() { 
+    if [ "$TUI_MODE" = "true" ] && [ "$TUI_ENABLED" = "true" ]; then
+        tui_log "✓ $1"
+    else
+        echo -e "${GREEN}[✓]${NC} $1"
+    fi
+}
+log_warning() { 
+    if [ "$TUI_MODE" = "true" ] && [ "$TUI_ENABLED" = "true" ]; then
+        tui_log "⚠ $1"
+    else
+        echo -e "${YELLOW}[!]${NC} $1"
+    fi
+}
+log_error() { 
+    if [ "$TUI_MODE" = "true" ] && [ "$TUI_ENABLED" = "true" ]; then
+        tui_log "✗ $1"
+    else
+        echo -e "${RED}[✗]${NC} $1"
+    fi
+}
+log_iteration() { 
+    if [ "$TUI_MODE" = "true" ] && [ "$TUI_ENABLED" = "true" ]; then
+        tui_log "→ $1"
+    else
+        echo -e "${CYAN}[ITER]${NC} $1"
+    fi
+}
 
 timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
 
@@ -469,17 +501,11 @@ execute_task_with_retries() {
 # ============================================================================
 
 main() {
-    echo ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  🔥 SACI - Sistema Autônomo de Coding${NC}"
-    echo -e "${CYAN}  Real Ralph Loop Implementation${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    
-    # Parse arguments
+    # Parse arguments first (before any output)
     while [[ $# -gt 0 ]]; do
         case $1 in
             --dry-run) DRY_RUN=true; shift ;;
+            --tui) TUI_MODE=true; shift ;;
             --prp) PRP_FILE="$2"; shift 2 ;;
             --max-iter) MAX_ITERATIONS="$2"; shift 2 ;;
             --provider) CLI_PROVIDER="$2"; shift 2 ;;
@@ -488,6 +514,7 @@ main() {
                 echo ""
                 echo "Options:"
                 echo "  --dry-run        Show what would be done without executing"
+                echo "  --tui            Enable visual TUI mode (requires gum)"
                 echo "  --prp FILE       Use specified PRP file (default: prp.json)"
                 echo "  --max-iter N     Max iterations per task (default: 10)"
                 echo "  --provider NAME  CLI provider: claude or amp (default: claude)"
@@ -497,6 +524,27 @@ main() {
             *) shift ;;
         esac
     done
+    
+    # Initialize TUI if enabled
+    if [ "$TUI_MODE" = "true" ]; then
+        source "$SCRIPT_DIR/lib/tui.sh"
+        if check_gum; then
+            tui_init
+        else
+            TUI_MODE=false
+            echo "Falling back to standard output..."
+        fi
+    fi
+    
+    # Show header (unless TUI mode)
+    if [ "$TUI_MODE" != "true" ]; then
+        echo ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${CYAN}  🔥 SACI - Sistema Autônomo de Coding${NC}"
+        echo -e "${CYAN}  Real Ralph Loop Implementation${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+    fi
     
     # Check dependencies
     check_dependencies
@@ -535,7 +583,13 @@ EOF
     
     while task_id=$(get_next_task) && [ -n "$task_id" ]; do
         remaining=$(count_remaining_tasks)
-        log_info "📋 Tasks remaining: $remaining"
+        
+        # Render TUI if enabled
+        if [ "$TUI_MODE" = "true" ]; then
+            tui_render "$PRP_FILE" "$task_id" "running"
+        else
+            log_info "📋 Tasks remaining: $remaining"
+        fi
         
         if [ "$DRY_RUN" = "true" ]; then
             # In dry-run, just show what would happen and mark complete
@@ -545,25 +599,32 @@ EOF
         else
             if execute_task_with_retries "$task_id"; then
                 completed=$((completed + 1))
+                [ "$TUI_MODE" = "true" ] && tui_render "$PRP_FILE" "$task_id" "success"
             else
                 failed=$((failed + 1))
+                [ "$TUI_MODE" = "true" ] && tui_render "$PRP_FILE" "$task_id" "failed"
                 log_warning "Skipping failed task, moving to next..."
             fi
         fi
         
-        echo ""
+        [ "$TUI_MODE" != "true" ] && echo ""
     done
     
     # Final summary
-    echo ""
-    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    log_success "🎉 Saci run complete!"
-    log_info "Completed: $completed tasks"
-    if [ $failed -gt 0 ]; then
-        log_warning "Failed: $failed tasks"
+    if [ "$TUI_MODE" = "true" ]; then
+        tui_render "$PRP_FILE" "" "complete"
+        tui_cleanup
+    else
+        echo ""
+        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log_success "🎉 Saci run complete!"
+        log_info "Completed: $completed tasks"
+        if [ $failed -gt 0 ]; then
+            log_warning "Failed: $failed tasks"
+        fi
+        log_info "Progress log: $PROGRESS_FILE"
+        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     fi
-    log_info "Progress log: $PROGRESS_FILE"
-    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
 # ============================================================================
