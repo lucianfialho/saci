@@ -110,3 +110,30 @@
   - The blocked state is specifically: passes=false AND has dependencies AND dependencies not met
   - Pattern of sourcing parent script (../saci.sh) allows library scripts to use core functions
 ---
+
+## [2026-01-15 22:45:00] - F1-T6
+- Implemented cascade reset functionality for the reset command
+- Added get_dependent_tasks() function to find all tasks that depend on a given task (lines 841-849)
+- Added reset_task_cascade() function to recursively reset a task and all its dependents (lines 851-882)
+- Modified run_reset() function to accept --cascade flag as second argument (lines 884-936)
+- Implementation details:
+  - get_dependent_tasks() uses jq to select tasks where dependencies array contains the target task ID
+  - Uses jq pattern: `select(.dependencies // [] | index($id))`
+  - reset_task_cascade() recursively processes all dependent tasks
+  - Tracks already-reset tasks to avoid infinite loops
+  - Returns space-separated list of all reset task IDs
+  - run_reset() parses second argument for --cascade flag
+  - With --cascade: calls reset_task_cascade() and logs all reset tasks
+  - Without --cascade: backward compatible, resets single task only
+  - Counts and displays formatted list of all tasks reset in cascade mode
+  - Updated help text to document `reset <task-id> --cascade` command (line 951)
+- Files changed: saci.sh (lines 841-936, 951)
+- **Learnings for future iterations:**
+  - The cascade reset implementation follows the same recursive pattern as circular dependency detection
+  - Using a space-separated list as an accumulator for tracking visited nodes is an effective pattern in bash
+  - The jq `index()` function is perfect for checking if an array contains a value
+  - Backward compatibility is maintained by checking if second argument equals "--cascade" exactly
+  - The recursive approach naturally handles multi-level dependencies (dependents of dependents)
+  - Clear logging with task count and comma-separated list improves user experience
+  - This completes the core dependency system - tasks can now be reset along with everything that depends on them
+---

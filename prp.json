@@ -193,7 +193,7 @@
           "title": "Implement cascade reset functionality",
           "description": "Adicionar flag --cascade ao comando reset para resetar tasks dependentes",
           "priority": 6,
-          "passes": false,
+          "passes": true,
           "dependencies": [
             "F1-T2",
             "F1-T3"
