@@ -122,13 +122,33 @@ check_dependencies() {
 }
 
 get_next_task() {
-    # Find first task with passes: false across all features, ordered by feature then task priority
-    jq -r '
-        [.features[] | .tasks[] | select(.passes == false)] 
-        | sort_by(.priority) 
-        | first 
-        | if . then .id else empty end
-    ' "$PRP_FILE"
+    # Find first task with passes: false that has all dependencies satisfied
+    # Get all candidate tasks sorted by priority
+    local candidates=$(jq -r '
+        [.features[] | .tasks[] | select(.passes == false)]
+        | sort_by(.priority)
+        | .[]
+        | .id
+    ' "$PRP_FILE")
+
+    # If no candidates, return empty
+    if [ -z "$candidates" ]; then
+        return 0
+    fi
+
+    # Iterate through candidates and return first one with satisfied dependencies
+    while IFS= read -r task_id; do
+        [ -z "$task_id" ] && continue
+
+        # Check if dependencies are met
+        if check_dependencies_met "$task_id"; then
+            echo "$task_id"
+            return 0
+        fi
+    done <<< "$candidates"
+
+    # No tasks with satisfied dependencies found
+    return 0
 }
 
 get_task_field() {
