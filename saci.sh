@@ -387,7 +387,12 @@ run_single_iteration() {
             
             # Commit changes
             git add -A 2>/dev/null || true
-            git commit -m "feat: $title [task-$task_id]" 2>/dev/null || true
+            git commit -m "$(cat <<EOF
+feat: $title [task-$task_id]
+
+Co-Authored-By: Saci <noreply@saci.sh>
+EOF
+)" 2>/dev/null || true
             
             # Mark task complete
             mark_task_complete "$task_id"
