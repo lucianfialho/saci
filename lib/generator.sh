@@ -26,12 +26,12 @@ prompt_text() {
     local default="${2:-}"
     
     if [ -n "$default" ]; then
-        log_prompt "$question [$default]"
+        echo -e "${CYAN}?${NC} $question [$default]" >&2
     else
-        log_prompt "$question"
+        echo -e "${CYAN}?${NC} $question" >&2
     fi
     
-    echo -n "> "
+    echo -n "> " >&2
     read -r answer
     
     if [ -z "$answer" ] && [ -n "$default" ]; then
@@ -45,10 +45,10 @@ prompt_list() {
     local question="$1"
     local items=()
     
-    log_prompt "$question (leave empty to finish)"
+    echo -e "${CYAN}?${NC} $question (leave empty to finish)" >&2
     
     while true; do
-        echo -n "> "
+        echo -n "> " >&2
         read -r item
         [ -z "$item" ] && break
         items+=("$item")
@@ -66,14 +66,14 @@ generate_feature() {
     local feature_name="$2"
     local feature_desc="$3"
     
-    log_info "Generating tasks for: $feature_name"
-    log_prompt "What tasks does this feature need? (leave empty to finish)"
+    echo -e "${BLUE}[GEN]${NC} Generating tasks for: $feature_name" >&2
+    echo -e "${CYAN}?${NC} What tasks does this feature need? (leave empty to finish)" >&2
     
     local tasks=()
     local task_num=1
     
     while true; do
-        echo -n "Task $task_num> "
+        echo -n "Task $task_num> " >&2
         read -r task_title
         [ -z "$task_title" ] && break
         
@@ -142,19 +142,19 @@ run_generator() {
     local project_desc=$(prompt_text "Describe the project idea")
     
     echo ""
-    log_info "Now let's define the main features"
-    log_prompt "What are the features? (leave empty to finish)"
-    echo ""
+    echo -e "${BLUE}[GEN]${NC} Now let's define the main features" >&2
+    echo -e "${CYAN}?${NC} What are the features? (leave empty to finish)" >&2
+    echo "" >&2
     
     local features=()
     local feature_num=1
     
     while true; do
-        echo -n "Feature $feature_num name> "
+        echo -n "Feature $feature_num name> " >&2
         read -r feature_name
         [ -z "$feature_name" ] && break
         
-        echo -n "Feature $feature_num description> "
+        echo -n "Feature $feature_num description> " >&2
         read -r feature_desc
         
         local feature_id="F${feature_num}"
