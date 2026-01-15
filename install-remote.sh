@@ -70,8 +70,7 @@ mkdir -p "$SACI_LIB_DIR/templates"
 
 # Copy files
 cp "$TMP_DIR/saci/lib/"*.sh "$SACI_LIB_DIR/lib/"
-cp "$TMP_DIR/saci/templates/"*.md "$SACI_LIB_DIR/templates/" 2>/dev/null || true
-cp "$TMP_DIR/saci/templates/"*.json "$SACI_LIB_DIR/templates/" 2>/dev/null || true
+cp -r "$TMP_DIR/saci/templates/"* "$SACI_LIB_DIR/templates/"
 cp "$TMP_DIR/saci/saci.sh" "$SACI_LIB_DIR/saci"
 
 # Update SCRIPT_DIR in installed script
