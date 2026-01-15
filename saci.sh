@@ -608,6 +608,7 @@ show_help() {
     echo "  init              Interactively generate PRP from your idea"
     echo "  analyze <file>    Analyze a file and suggest patterns/hints"
     echo "  reset [task-id]   Reset all tasks (or specific task) to passes: false"
+    echo "  status            Show task progress with nice TUI (requires gum)"
     echo "  run               Execute the Ralph loop (default)"
     echo ""
     echo "Run Options:"
@@ -649,6 +650,11 @@ case "${1:-run}" in
     reset)
         shift
         run_reset "$@"
+        ;;
+    status)
+        source "$SCRIPT_DIR/lib/tui.sh"
+        shift
+        show_status "${1:-prp.json}"
         ;;
     run)
         shift 2>/dev/null || true
