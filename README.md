@@ -1,4 +1,4 @@
-# 🔥 Saci
+# 🌪️ Saci
 
 **The Brazilian fork of Ralph**
 
@@ -6,7 +6,7 @@ Saci is an autonomous loop that runs [Claude Code](https://docs.anthropic.com/en
 
 > Like the Saci Pererê (Brazilian folklore): mischievous, agile, and solves problems its own way.
 
-## 🆚 Saci vs Ralph
+## Saci vs Ralph
 
 | Feature | Ralph | Saci |
 |---------|-------|------|
@@ -22,7 +22,7 @@ Saci is an autonomous loop that runs [Claude Code](https://docs.anthropic.com/en
 | Generates AGENTS.md | ❌ | ✅ Auto-detects context |
 | Task structure | `userStories[]` flat | `features[].tasks[]` hierarchical |
 
-## 🚀 Installation
+## Installation
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lucianfialho/saci/main/install-remote.sh | bash
@@ -47,7 +47,7 @@ cd saci
 - Git
 - `gum` (optional, for TUI mode - `brew install gum` on macOS)
 
-## ⚡ Commands
+## Commands
 
 | Command | Description |
 |---------|-------------|
@@ -57,7 +57,7 @@ cd saci
 | `saci reset [task-id]` | Resets all tasks (or specific task) to `passes: false` |
 | `saci run` | Starts the Autonomous Loop |
 
-## 📝 Workflow
+## Workflow
 
 ```bash
 cd my-project
@@ -82,7 +82,7 @@ saci run --prp custom.json  # Use different PRP file
 saci run --max-iter 20      # Max iterations (default: 10)
 ```
 
-## 🧠 How It Works
+## How It Works
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -105,7 +105,7 @@ saci run --max-iter 20      # Max iterations (default: 10)
 - **Error feedback**: Exact error passed to next retry
 - **External memory**: `progress.txt` persists learnings
 
-## 📁 Structure
+## Structure
 
 ```
 saci/
@@ -127,7 +127,7 @@ saci/
         └── default.md   # Execution guidelines
 ```
 
-## 📋 PRP Format
+## PRP Format
 
 ```json
 {
@@ -159,7 +159,7 @@ saci/
 }
 ```
 
-## 🎯 PRP Skill
+## PRP Skill
 
 Saci installs a skill in Claude Code to generate PRPs:
 
@@ -173,7 +173,7 @@ Saci installs a skill in Claude Code to generate PRPs:
 [Generates: tasks/prp-priority.md + prp.json]
 ```
 
-## 🌐 Visual UI Verification (Optional)
+## Visual UI Verification (Optional)
 
 For frontend tasks, you can use tools that allow Claude to verify UI in the browser:
 
@@ -199,7 +199,7 @@ With this, UI tasks can have in acceptance criteria:
 
 Claude opens the browser, navigates, clicks, sees console errors, and validates visually.
 
-## 🔒 Safety Hook
+## Safety Hook
 
 Blocks dangerous commands before execution:
 
@@ -213,7 +213,7 @@ Blocks dangerous commands before execution:
 | **Database** | `DROP DATABASE`, `DELETE FROM x;` |
 | **Secrets** | `cat .env`, `echo $API_KEY` |
 
-## 🐛 Debug
+## Debug
 
 ```bash
 # See pending tasks
@@ -232,12 +232,12 @@ saci reset
 saci reset F1-T3
 ```
 
-## 📚 References
+## References
 
 - [Ralph (inspiration)](https://github.com/snarktank/ralph)
 - [Geoffrey Huntley's Ralph pattern](https://ghuntley.com/ralph/)
 - [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code)
 
-## 📄 License
+## License
 
 MIT

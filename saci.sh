@@ -426,7 +426,7 @@ EOF
             if [ -n "$git_checkpoint" ]; then
                 log_info "Rolling back to checkpoint ${git_checkpoint:0:7}..."
                 git reset --hard "$git_checkpoint" 2>/dev/null || true
-                git clean -fd 2>/dev/null || true
+                git clean -fd -e prp.json -e progress.txt 2>/dev/null || true
                 log_success "Rollback complete"
             fi
             
@@ -451,7 +451,7 @@ $test_output
         if [ -n "$git_checkpoint" ]; then
             log_info "Rolling back to checkpoint ${git_checkpoint:0:7}..."
             git reset --hard "$git_checkpoint" 2>/dev/null || true
-            git clean -fd 2>/dev/null || true
+            git clean -fd -e prp.json -e progress.txt 2>/dev/null || true
         fi
         
         log_progress "$task_id" "❌ SESSION FAILED" "
