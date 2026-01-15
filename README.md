@@ -24,10 +24,17 @@ Saci is an autonomous loop that runs [Claude Code](https://docs.anthropic.com/en
 
 ## 🚀 Installation
 
+### Quick Install (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lucianfialho/saci/main/install-remote.sh | bash
+```
+
+### Manual Install
+
 ```bash
 git clone https://github.com/lucianfialho/saci.git
 cd saci
-chmod +x install.sh
 ./install.sh
 ```
 
