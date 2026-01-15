@@ -146,6 +146,8 @@ saci/
           "title": "Task title",
           "priority": 1,
           "passes": false,
+          "dependencies": [],
+          "dependencyMode": "all",
           "context": {
             "files": ["src/file.ts"],
             "hints": ["Use pattern X"]
@@ -158,6 +160,181 @@ saci/
   ]
 }
 ```
+
+## Task Dependencies
+
+Saci supports task dependencies, allowing you to define execution order and relationships between tasks.
+
+### Dependency Fields
+
+- **`dependencies`**: Array of task IDs that must complete before this task can run
+  - Example: `["F1-T1", "F1-T2"]`
+  - Empty array `[]` means no dependencies (task can run immediately)
+  - Can reference tasks from other features (cross-feature dependencies)
+
+- **`dependencyMode`**: How dependencies are evaluated (default: `"all"`)
+  - `"all"`: **ALL** dependencies must complete (AND logic)
+  - `"any"`: **ANY** dependency must complete (OR logic)
+
+### Dependency Examples
+
+#### Linear Dependencies (Sequential Tasks)
+
+```json
+{
+  "tasks": [
+    {
+      "id": "F1-T1",
+      "title": "Setup database schema",
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "F1-T2",
+      "title": "Add migration scripts",
+      "dependencies": ["F1-T1"],
+      "dependencyMode": "all",
+      "passes": false
+    },
+    {
+      "id": "F1-T3",
+      "title": "Seed initial data",
+      "dependencies": ["F1-T2"],
+      "dependencyMode": "all",
+      "passes": false
+    }
+  ]
+}
+```
+
+**Result**: Tasks execute in order: T1 → T2 → T3
+
+#### Parallel Dependencies (Multiple Prerequisites)
+
+```json
+{
+  "tasks": [
+    {
+      "id": "F1-T1",
+      "title": "Create API endpoint",
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "F1-T2",
+      "title": "Create UI component",
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "F1-T3",
+      "title": "Integration test",
+      "dependencies": ["F1-T1", "F1-T2"],
+      "dependencyMode": "all",
+      "passes": false
+    }
+  ]
+}
+```
+
+**Result**: T1 and T2 can run in any order, T3 waits for both
+
+#### Cross-Feature Dependencies
+
+```json
+{
+  "features": [
+    {
+      "id": "F1",
+      "tasks": [
+        {
+          "id": "F1-T1",
+          "title": "Authentication system",
+          "dependencies": [],
+          "passes": false
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "tasks": [
+        {
+          "id": "F2-T1",
+          "title": "User profile page",
+          "dependencies": ["F1-T1"],
+          "dependencyMode": "all",
+          "passes": false
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Result**: F2-T1 cannot start until F1-T1 completes
+
+#### OR Dependencies (Any Mode)
+
+```json
+{
+  "tasks": [
+    {
+      "id": "F1-T1",
+      "title": "Setup PostgreSQL",
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "F1-T2",
+      "title": "Setup MySQL",
+      "dependencies": [],
+      "passes": false
+    },
+    {
+      "id": "F1-T3",
+      "title": "Run database tests",
+      "dependencies": ["F1-T1", "F1-T2"],
+      "dependencyMode": "any",
+      "passes": false
+    }
+  ]
+}
+```
+
+**Result**: T3 can run when **either** T1 **or** T2 completes (not both required)
+
+### Dependency Validation
+
+Saci automatically validates dependencies on startup:
+
+- **Circular dependencies**: Detects cycles like T1 → T2 → T3 → T1
+- **Missing task IDs**: Warns if dependency references non-existent task
+- **Execution order**: Only selects tasks with satisfied dependencies
+
+### Cascade Reset
+
+Reset a task and all tasks that depend on it:
+
+```bash
+# Reset single task only
+saci reset F1-T3
+
+# Reset task + all dependent tasks recursively
+saci reset F1-T1 --cascade
+```
+
+**Example**: If T1 → T2 → T3, then `saci reset F1-T1 --cascade` resets all three tasks.
+
+### Visual Indicators (TUI Mode)
+
+When running `saci jump --tui`, dependency status is shown:
+
+- `■` Task complete
+- `▶` Task currently running
+- `□` Task ready (dependencies met)
+- `⊗` Task blocked (dependencies not met)
+
+Tasks blocked by dependencies show: `⊗ F1-T3 [depends on: F1-T1, F1-T2]`
 
 ## PRP Skill
 
@@ -230,6 +407,21 @@ saci reset
 
 # Reset specific task
 saci reset F1-T3
+
+# Reset task and all dependent tasks
+saci reset F1-T1 --cascade
+
+# Check task dependencies
+cat prp.json | jq '.features[].tasks[] | select(.id == "F1-T3") | .dependencies'
+
+# List tasks blocked by dependencies
+cat prp.json | jq '.features[].tasks[] | select(.passes == false and (.dependencies // [] | length > 0)) | {id, title, dependencies}'
+
+# Find all tasks that depend on a specific task
+cat prp.json | jq --arg id "F1-T1" '.features[].tasks[] | select(.dependencies // [] | index($id)) | {id, title}'
+
+# Visualize dependency graph (requires jq)
+cat prp.json | jq -r '.features[].tasks[] | select((.dependencies // [] | length) > 0) | .id + " depends on: " + (.dependencies | join(", "))'
 ```
 
 ## References
