@@ -53,6 +53,7 @@ cd saci
 | `saci scan` | Detects stack, generates `prp.json` and `AGENTS.md` |
 | `saci init` | Creates a PRP interactively |
 | `saci analyze <file>` | Analyzes a file and suggests patterns |
+| `saci reset [task-id]` | Resets all tasks (or specific task) to `passes: false` |
 | `saci run` | Starts the Autonomous Loop |
 
 ## 📝 Workflow
@@ -221,6 +222,12 @@ cat progress.txt
 
 # Dry run
 saci run --dry-run
+
+# Reset all tasks to retry
+saci reset
+
+# Reset specific task
+saci reset F1-T3
 ```
 
 ## 📚 References
