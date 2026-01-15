@@ -838,22 +838,88 @@ EOF
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+get_dependent_tasks() {
+    # Find all tasks that depend on the given task_id
+    local target_id="$1"
+    jq -r --arg id "$target_id" '
+        .features[].tasks[] |
+        select(.dependencies // [] | index($id)) |
+        .id
+    ' "$PRP_FILE"
+}
+
+reset_task_cascade() {
+    # Recursively reset a task and all its dependents
+    local task_id="$1"
+    local reset_list="${2:-}"  # Space-separated list of already reset tasks
+
+    # Check if already reset to avoid infinite loops
+    if echo " $reset_list " | grep -q " $task_id "; then
+        return 0
+    fi
+
+    # Reset this task
+    local tmp_file=$(mktemp)
+    jq --arg id "$task_id" '
+        .features |= map(.tasks |= map(if .id == $id then .passes = false else . end))
+    ' "$PRP_FILE" > "$tmp_file" && mv "$tmp_file" "$PRP_FILE"
+
+    # Add to reset list
+    reset_list="$reset_list $task_id"
+
+    # Find all tasks that depend on this task
+    local dependents=$(get_dependent_tasks "$task_id")
+
+    # Recursively reset each dependent
+    if [ -n "$dependents" ]; then
+        while IFS= read -r dep_task; do
+            [ -z "$dep_task" ] && continue
+            reset_list=$(reset_task_cascade "$dep_task" "$reset_list")
+        done <<< "$dependents"
+    fi
+
+    echo "$reset_list"
+}
+
 run_reset() {
     local prp_file="${PRP_FILE:-prp.json}"
     local task_id="${1:-}"
-    
+    local cascade_flag="${2:-}"
+
     if [ ! -f "$prp_file" ]; then
         log_error "PRP file not found: $prp_file"
         exit 1
     fi
-    
+
     if [ -n "$task_id" ]; then
         # Reset specific task
-        local tmp_file=$(mktemp)
-        jq --arg id "$task_id" '
-            .features |= map(.tasks |= map(if .id == $id then .passes = false else . end))
-        ' "$prp_file" > "$tmp_file" && mv "$tmp_file" "$prp_file"
-        log_success "Reset task $task_id to passes: false"
+        if [ "$cascade_flag" = "--cascade" ]; then
+            # Reset with cascade
+            log_info "Resetting $task_id and all dependent tasks..."
+            local reset_list=$(reset_task_cascade "$task_id" "")
+
+            # Count and display reset tasks
+            local reset_count=0
+            local task_names=""
+            for tid in $reset_list; do
+                [ -z "$tid" ] && continue
+                reset_count=$((reset_count + 1))
+                if [ -z "$task_names" ]; then
+                    task_names="$tid"
+                else
+                    task_names="$task_names, $tid"
+                fi
+            done
+
+            log_success "Reset $reset_count task(s) in cascade: $task_names"
+        else
+            # Reset single task (backward compatible)
+            local tmp_file=$(mktemp)
+            jq --arg id "$task_id" '
+                .features |= map(.tasks |= map(if .id == $id then .passes = false else . end))
+            ' "$prp_file" > "$tmp_file" && mv "$tmp_file" "$prp_file"
+            log_success "Reset task $task_id to passes: false"
+        fi
     else
         # Reset all tasks
         local tmp_file=$(mktemp)
@@ -861,7 +927,7 @@ run_reset() {
         local count=$(jq '[.features[].tasks[]] | length' "$prp_file")
         log_success "Reset all $count tasks to passes: false"
     fi
-    
+
     # Also clear progress file
     if [ -f "$PROGRESS_FILE" ]; then
         echo "# Progress reset at $(timestamp)" > "$PROGRESS_FILE"
@@ -878,12 +944,13 @@ show_help() {
     echo "Usage: saci.sh <command> [options]"
     echo ""
     echo "Commands:"
-    echo "  scan              Scan codebase and auto-detect context"
-    echo "  init              Interactively generate PRP from your idea"
-    echo "  analyze <file>    Analyze a file and suggest patterns/hints"
-    echo "  reset [task-id]   Reset all tasks (or specific task) to passes: false"
-    echo "  status            Show task progress with nice TUI (requires gum)"
-    echo "  jump              Execute the Ralph loop (default)"
+    echo "  scan                     Scan codebase and auto-detect context"
+    echo "  init                     Interactively generate PRP from your idea"
+    echo "  analyze <file>           Analyze a file and suggest patterns/hints"
+    echo "  reset [task-id]          Reset all tasks (or specific task) to passes: false"
+    echo "  reset <task-id> --cascade Reset task and all dependent tasks recursively"
+    echo "  status                   Show task progress with nice TUI (requires gum)"
+    echo "  jump                     Execute the Ralph loop (default)"
     echo ""
     echo "Jump Options:"
     echo "  --dry-run           Show what would be done without executing"
