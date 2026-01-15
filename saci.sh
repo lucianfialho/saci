@@ -564,6 +564,37 @@ EOF
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+run_reset() {
+    local prp_file="${PRP_FILE:-prp.json}"
+    local task_id="${1:-}"
+    
+    if [ ! -f "$prp_file" ]; then
+        log_error "PRP file not found: $prp_file"
+        exit 1
+    fi
+    
+    if [ -n "$task_id" ]; then
+        # Reset specific task
+        local tmp_file=$(mktemp)
+        jq --arg id "$task_id" '
+            .features |= map(.tasks |= map(if .id == $id then .passes = false else . end))
+        ' "$prp_file" > "$tmp_file" && mv "$tmp_file" "$prp_file"
+        log_success "Reset task $task_id to passes: false"
+    else
+        # Reset all tasks
+        local tmp_file=$(mktemp)
+        jq '.features |= map(.tasks |= map(.passes = false))' "$prp_file" > "$tmp_file" && mv "$tmp_file" "$prp_file"
+        local count=$(jq '[.features[].tasks[]] | length' "$prp_file")
+        log_success "Reset all $count tasks to passes: false"
+    fi
+    
+    # Also clear progress file
+    if [ -f "$PROGRESS_FILE" ]; then
+        echo "# Progress reset at $(timestamp)" > "$PROGRESS_FILE"
+        log_info "Cleared progress.txt"
+    fi
+}
+
 show_help() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -576,6 +607,7 @@ show_help() {
     echo "  scan              Scan codebase and auto-detect context"
     echo "  init              Interactively generate PRP from your idea"
     echo "  analyze <file>    Analyze a file and suggest patterns/hints"
+    echo "  reset [task-id]   Reset all tasks (or specific task) to passes: false"
     echo "  run               Execute the Ralph loop (default)"
     echo ""
     echo "Run Options:"
@@ -613,6 +645,10 @@ case "${1:-run}" in
         source "$SCRIPT_DIR/lib/analyzer.sh"
         shift
         run_analyzer "$@"
+        ;;
+    reset)
+        shift
+        run_reset "$@"
         ;;
     run)
         shift 2>/dev/null || true
