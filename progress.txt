@@ -87,3 +87,26 @@
   - Future tasks created via the generator will automatically include dependency fields
   - The jq trim pattern `gsub("^\\s+|\\s+$";"")` handles whitespace in user input gracefully
 ---
+
+## [2026-01-15 22:10:00] - F1-T5
+- Implemented blocked task indicators in the TUI
+- Modified tui_task_list() function (lines 54-95) to detect and display blocked tasks
+- Modified show_status() function (lines 273-305) to show dependency information
+- Implementation details:
+  - tui_task_list() now sources saci.sh to access check_dependencies_met() (lines 59-64)
+  - Uses jq to extract task ID, title, passes status, and dependencies (line 67)
+  - Determines icon based on task state: ▶ (running), ■ (complete), □ (ready), ⊗ (blocked) (lines 70-91)
+  - Checks if task has dependencies and if they're met using check_dependencies_met() (lines 76-87)
+  - Temporarily sets PRP_FILE environment variable for dependency checking (lines 78-87)
+  - show_status() also sources saci.sh and uses similar logic (lines 274-277)
+  - For blocked tasks, appends "[depends on: ...]" with list from get_blocked_dependencies() (lines 292-297)
+- Files changed: lib/tui.sh
+- **Learnings for future iterations:**
+  - The TUI functions need to source saci.sh to access dependency helper functions
+  - Must temporarily set PRP_FILE environment variable since helper functions expect it as a global
+  - Using pipe to while loop with IFS='|' is an effective pattern for processing multi-field jq output
+  - The 2>/dev/null suppresses errors when dependency functions are called before saci.sh is sourced
+  - Icon logic follows clear priority: running > complete > blocked > ready
+  - The blocked state is specifically: passes=false AND has dependencies AND dependencies not met
+  - Pattern of sourcing parent script (../saci.sh) allows library scripts to use core functions
+---

@@ -157,7 +157,7 @@
           "title": "Add blocked task indicators to TUI",
           "description": "Atualizar lib/tui.sh para mostrar ícone ⊗ em tasks bloqueadas por dependências",
           "priority": 5,
-          "passes": false,
+          "passes": true,
           "dependencies": [
             "F1-T1"
           ],
