@@ -188,6 +188,95 @@ get_feature_for_task() {
 }
 
 # ============================================================================
+# Dependency Helper Functions
+# ============================================================================
+
+get_task_dependencies() {
+    local task_id="$1"
+    jq -r --arg id "$task_id" '
+        .features[].tasks[] | select(.id == $id) |
+        .dependencies // [] | .[]
+    ' "$PRP_FILE"
+}
+
+get_dependency_mode() {
+    local task_id="$1"
+    jq -r --arg id "$task_id" '
+        .features[].tasks[] | select(.id == $id) |
+        .dependencyMode // "all"
+    ' "$PRP_FILE"
+}
+
+check_dependencies_met() {
+    local task_id="$1"
+    local mode=$(get_dependency_mode "$task_id")
+    local dependencies=$(get_task_dependencies "$task_id")
+
+    # If no dependencies, always met
+    if [ -z "$dependencies" ]; then
+        return 0
+    fi
+
+    local met_count=0
+    local total_count=0
+
+    while IFS= read -r dep_id; do
+        [ -z "$dep_id" ] && continue
+        total_count=$((total_count + 1))
+
+        # Check if dependency task passes
+        local dep_passes=$(jq -r --arg id "$dep_id" '
+            .features[].tasks[] | select(.id == $id) | .passes // false
+        ' "$PRP_FILE")
+
+        if [ "$dep_passes" = "true" ]; then
+            met_count=$((met_count + 1))
+        fi
+    done <<< "$dependencies"
+
+    # If mode is 'any', at least one dependency must be met
+    if [ "$mode" = "any" ]; then
+        [ $met_count -gt 0 ]
+        return $?
+    fi
+
+    # Default mode is 'all', all dependencies must be met
+    [ $met_count -eq $total_count ]
+    return $?
+}
+
+get_blocked_dependencies() {
+    local task_id="$1"
+    local dependencies=$(get_task_dependencies "$task_id")
+
+    # If no dependencies, return empty
+    if [ -z "$dependencies" ]; then
+        return 0
+    fi
+
+    local blocked=""
+
+    while IFS= read -r dep_id; do
+        [ -z "$dep_id" ] && continue
+
+        # Check if dependency task passes
+        local dep_passes=$(jq -r --arg id "$dep_id" '
+            .features[].tasks[] | select(.id == $id) | .passes // false
+        ' "$PRP_FILE")
+
+        if [ "$dep_passes" != "true" ]; then
+            if [ -z "$blocked" ]; then
+                blocked="$dep_id"
+            else
+                blocked="$blocked $dep_id"
+            fi
+        fi
+    done <<< "$dependencies"
+
+    echo "$blocked"
+}
+
+# ============================================================================
 # Prompt Builder
 # ============================================================================
 
