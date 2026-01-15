@@ -212,9 +212,9 @@ $system_prompt
 **Iteration:** $iteration of $MAX_ITERATIONS
 
 ## Available Skills
-- **prp**: For planning new features - generates spec document + `prp.json`.
+- **prp**: For planning new features - generates spec document + prp.json.
 
-Refer to guidelines in `default.md` for implementation and debugging best practices.
+Refer to guidelines in default.md for implementation and debugging best practices.
 
 ## Description
 $description
