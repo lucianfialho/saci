@@ -277,7 +277,7 @@
           "title": "Update documentation for dependency system",
           "description": "Atualizar README.md com documentação completa do sistema de dependências",
           "priority": 8,
-          "passes": false,
+          "passes": true,
           "dependencies": [
             "F1-T7"
           ],

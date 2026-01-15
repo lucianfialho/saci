@@ -137,3 +137,33 @@
   - Clear logging with task count and comma-separated list improves user experience
   - This completes the core dependency system - tasks can now be reset along with everything that depends on them
 ---
+
+## [2026-01-15 23:15:00] - F1-T8
+- Added comprehensive documentation for the dependency system to README.md
+- Implementation details:
+  - Added new "Task Dependencies" section after "PRP Format" (line 164)
+  - Documented `dependencies` field: array of task IDs that must complete first
+  - Documented `dependencyMode` field: 'all' (AND) or 'any' (OR) logic
+  - Added 4 complete examples with explanations:
+    - Linear dependencies (sequential tasks: T1 → T2 → T3)
+    - Parallel dependencies (multiple prerequisites: T1+T2 → T3)
+    - Cross-feature dependencies (F1-T1 → F2-T1)
+    - OR dependencies (mode: 'any' - T1 OR T2 → T3)
+  - Documented automatic dependency validation on startup
+  - Documented cascade reset functionality with examples
+  - Added TUI visual indicators (■ □ ▶ ⊗)
+  - Updated Debug section with 5 new dependency-related commands:
+    - `saci reset --cascade`
+    - Check task dependencies with jq
+    - List blocked tasks
+    - Find dependent tasks
+    - Visualize dependency graph
+  - Updated PRP Format example to include dependencies fields
+- Files changed: README.md (192 lines added)
+- **Learnings for future iterations:**
+  - Documentation should provide both field definitions AND practical examples
+  - Multiple examples covering different use cases (linear, parallel, cross-feature, OR) help users understand when to use each pattern
+  - Including Debug section commands makes the feature more discoverable and usable
+  - The dependency system is now fully documented and ready for users
+  - All 8 tasks in the Dependency System Core feature are now complete!
+---
