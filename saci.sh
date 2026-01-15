@@ -311,16 +311,30 @@ run_single_iteration() {
     local cli_cmd
     case "$CLI_PROVIDER" in
         claude)
-            cli_cmd="claude --print"
+            # --print: non-interactive mode
+            # --dangerously-skip-permissions: auto-approve all actions (required for autonomous execution)
+            cli_cmd="claude --print --dangerously-skip-permissions"
             ;;
         amp)
-            cli_cmd="amp --execute"
+            cli_cmd="amp --print --dangerously-skip-permissions"
             ;;
     esac
     
     # Run CLI with the prompt - this starts a NEW session
     if cat "$prompt_file" | $cli_cmd 2>&1 | tee "$cli_output_file"; then
         rm -f "$prompt_file"
+        
+        # ================================================================
+        # CHECK IF ANY FILES WERE ACTUALLY MODIFIED
+        # ================================================================
+        local changed_files=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$changed_files" -eq 0 ]; then
+            log_warning "No files were modified - AI did not make any changes"
+            LAST_ERROR="No files were modified. The AI session completed but did not create or edit any files. Please ensure you actually create/modify the required files."
+            rm -f "$cli_output_file"
+            return 1
+        fi
+        log_info "Files modified: $changed_files"
         
         # Run tests and CAPTURE the output
         log_info "Running tests: $test_cmd"
