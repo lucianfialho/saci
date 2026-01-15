@@ -76,9 +76,30 @@ generate_feature() {
         echo -n "Task $task_num> " >&2
         read -r task_title
         [ -z "$task_title" ] && break
-        
+
         local task_id="${feature_id}-T${task_num}"
-        
+
+        # Ask about dependencies
+        echo -n "Dependencies (comma-separated IDs, or empty)> " >&2
+        read -r deps_input
+
+        # Parse dependencies into JSON array
+        local deps_json="[]"
+        local dep_mode="all"
+
+        if [ -n "$deps_input" ]; then
+            # Convert comma-separated input to JSON array using jq
+            deps_json=$(echo "$deps_input" | jq -R 'split(",") | map(gsub("^\\s+|\\s+$";""))')
+
+            # Ask for dependency mode
+            echo -n "Dependency mode? (all/any, default: all)> " >&2
+            read -r mode_input
+
+            if [ -n "$mode_input" ]; then
+                dep_mode="$mode_input"
+            fi
+        fi
+
         # Simple task structure
         tasks+=("{
       \"id\": \"$task_id\",
@@ -86,6 +107,8 @@ generate_feature() {
       \"description\": \"TODO: Add description\",
       \"priority\": $task_num,
       \"passes\": false,
+      \"dependencies\": $deps_json,
+      \"dependencyMode\": \"$dep_mode\",
       \"context\": {
         \"files\": [],
         \"libraries\": [],
@@ -96,7 +119,7 @@ generate_feature() {
         \"command\": \"npm test\"
       }
     }")
-        
+
         task_num=$((task_num + 1))
     done
     

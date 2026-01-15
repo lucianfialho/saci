@@ -122,13 +122,33 @@ check_dependencies() {
 }
 
 get_next_task() {
-    # Find first task with passes: false across all features, ordered by feature then task priority
-    jq -r '
-        [.features[] | .tasks[] | select(.passes == false)] 
-        | sort_by(.priority) 
-        | first 
-        | if . then .id else empty end
-    ' "$PRP_FILE"
+    # Find first task with passes: false that has all dependencies satisfied
+    # Get all candidate tasks sorted by priority
+    local candidates=$(jq -r '
+        [.features[] | .tasks[] | select(.passes == false)]
+        | sort_by(.priority)
+        | .[]
+        | .id
+    ' "$PRP_FILE")
+
+    # If no candidates, return empty
+    if [ -z "$candidates" ]; then
+        return 0
+    fi
+
+    # Iterate through candidates and return first one with satisfied dependencies
+    while IFS= read -r task_id; do
+        [ -z "$task_id" ] && continue
+
+        # Check if dependencies are met
+        if check_dependencies_met "$task_id"; then
+            echo "$task_id"
+            return 0
+        fi
+    done <<< "$candidates"
+
+    # No tasks with satisfied dependencies found
+    return 0
 }
 
 get_task_field() {
@@ -185,6 +205,180 @@ get_feature_for_task() {
     jq -r --arg id "$task_id" '
         .features[] | select(.tasks[] | .id == $id) | .name
     ' "$PRP_FILE"
+}
+
+# ============================================================================
+# Dependency Helper Functions
+# ============================================================================
+
+get_task_dependencies() {
+    local task_id="$1"
+    jq -r --arg id "$task_id" '
+        .features[].tasks[] | select(.id == $id) |
+        .dependencies // [] | .[]
+    ' "$PRP_FILE"
+}
+
+get_dependency_mode() {
+    local task_id="$1"
+    jq -r --arg id "$task_id" '
+        .features[].tasks[] | select(.id == $id) |
+        .dependencyMode // "all"
+    ' "$PRP_FILE"
+}
+
+check_dependencies_met() {
+    local task_id="$1"
+    local mode=$(get_dependency_mode "$task_id")
+    local dependencies=$(get_task_dependencies "$task_id")
+
+    # If no dependencies, always met
+    if [ -z "$dependencies" ]; then
+        return 0
+    fi
+
+    local met_count=0
+    local total_count=0
+
+    while IFS= read -r dep_id; do
+        [ -z "$dep_id" ] && continue
+        total_count=$((total_count + 1))
+
+        # Check if dependency task passes
+        local dep_passes=$(jq -r --arg id "$dep_id" '
+            .features[].tasks[] | select(.id == $id) | .passes // false
+        ' "$PRP_FILE")
+
+        if [ "$dep_passes" = "true" ]; then
+            met_count=$((met_count + 1))
+        fi
+    done <<< "$dependencies"
+
+    # If mode is 'any', at least one dependency must be met
+    if [ "$mode" = "any" ]; then
+        [ $met_count -gt 0 ]
+        return $?
+    fi
+
+    # Default mode is 'all', all dependencies must be met
+    [ $met_count -eq $total_count ]
+    return $?
+}
+
+get_blocked_dependencies() {
+    local task_id="$1"
+    local dependencies=$(get_task_dependencies "$task_id")
+
+    # If no dependencies, return empty
+    if [ -z "$dependencies" ]; then
+        return 0
+    fi
+
+    local blocked=""
+
+    while IFS= read -r dep_id; do
+        [ -z "$dep_id" ] && continue
+
+        # Check if dependency task passes
+        local dep_passes=$(jq -r --arg id "$dep_id" '
+            .features[].tasks[] | select(.id == $id) | .passes // false
+        ' "$PRP_FILE")
+
+        if [ "$dep_passes" != "true" ]; then
+            if [ -z "$blocked" ]; then
+                blocked="$dep_id"
+            else
+                blocked="$blocked $dep_id"
+            fi
+        fi
+    done <<< "$dependencies"
+
+    echo "$blocked"
+}
+
+# ============================================================================
+# Circular Dependency Detection
+# ============================================================================
+
+detect_circular_dependency() {
+    local task_id="$1"
+    local path="${2:-}"  # Current path for cycle detection
+    local visited="${3:-}"  # Space-separated list of visited nodes
+
+    # Add current task to path
+    if [ -z "$path" ]; then
+        path="$task_id"
+    else
+        path="$path -> $task_id"
+    fi
+
+    # Check if we've visited this node before (cycle detected)
+    if echo " $visited " | grep -q " $task_id "; then
+        # Cycle detected! Return the full path
+        echo "$path"
+        return 1
+    fi
+
+    # Add to visited list
+    visited="$visited $task_id"
+
+    # Get dependencies of current task
+    local dependencies=$(get_task_dependencies "$task_id")
+
+    # If no dependencies, no cycle from this path
+    if [ -z "$dependencies" ]; then
+        return 0
+    fi
+
+    # Check each dependency recursively
+    while IFS= read -r dep_id; do
+        [ -z "$dep_id" ] && continue
+
+        # Recursively check this dependency
+        local cycle_path
+        if ! cycle_path=$(detect_circular_dependency "$dep_id" "$path" "$visited"); then
+            # Cycle detected in recursive call
+            echo "$cycle_path"
+            return 1
+        fi
+    done <<< "$dependencies"
+
+    # No cycle found from this task
+    return 0
+}
+
+validate_dependencies() {
+    local prp_file="${1:-$PRP_FILE}"
+
+    log_info "Validating task dependencies..."
+
+    # Get all tasks with dependencies
+    local tasks_with_deps=$(jq -r '
+        .features[].tasks[] |
+        select(.dependencies != null and (.dependencies | length) > 0) |
+        .id
+    ' "$prp_file")
+
+    # If no tasks have dependencies, nothing to validate
+    if [ -z "$tasks_with_deps" ]; then
+        log_success "No task dependencies to validate"
+        return 0
+    fi
+
+    # Check each task for circular dependencies
+    while IFS= read -r task_id; do
+        [ -z "$task_id" ] && continue
+
+        local cycle_path
+        if ! cycle_path=$(detect_circular_dependency "$task_id" "" ""); then
+            log_error "Circular dependency detected!"
+            log_error "Cycle path: $cycle_path"
+            return 1
+        fi
+    done <<< "$tasks_with_deps"
+
+    log_success "No circular dependencies found"
+    return 0
 }
 
 # ============================================================================
@@ -560,7 +754,13 @@ main() {
         log_info "Create a prp.json file or specify with --prp"
         exit 1
     fi
-    
+
+    # Validate dependencies (detect circular dependencies)
+    if ! validate_dependencies "$PRP_FILE"; then
+        log_error "Dependency validation failed. Please fix circular dependencies before running."
+        exit 1
+    fi
+
     # Initialize progress file
     if [ ! -f "$PROGRESS_FILE" ]; then
         cat > "$PROGRESS_FILE" <<EOF
@@ -638,22 +838,88 @@ EOF
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+get_dependent_tasks() {
+    # Find all tasks that depend on the given task_id
+    local target_id="$1"
+    jq -r --arg id "$target_id" '
+        .features[].tasks[] |
+        select(.dependencies // [] | index($id)) |
+        .id
+    ' "$PRP_FILE"
+}
+
+reset_task_cascade() {
+    # Recursively reset a task and all its dependents
+    local task_id="$1"
+    local reset_list="${2:-}"  # Space-separated list of already reset tasks
+
+    # Check if already reset to avoid infinite loops
+    if echo " $reset_list " | grep -q " $task_id "; then
+        return 0
+    fi
+
+    # Reset this task
+    local tmp_file=$(mktemp)
+    jq --arg id "$task_id" '
+        .features |= map(.tasks |= map(if .id == $id then .passes = false else . end))
+    ' "$PRP_FILE" > "$tmp_file" && mv "$tmp_file" "$PRP_FILE"
+
+    # Add to reset list
+    reset_list="$reset_list $task_id"
+
+    # Find all tasks that depend on this task
+    local dependents=$(get_dependent_tasks "$task_id")
+
+    # Recursively reset each dependent
+    if [ -n "$dependents" ]; then
+        while IFS= read -r dep_task; do
+            [ -z "$dep_task" ] && continue
+            reset_list=$(reset_task_cascade "$dep_task" "$reset_list")
+        done <<< "$dependents"
+    fi
+
+    echo "$reset_list"
+}
+
 run_reset() {
     local prp_file="${PRP_FILE:-prp.json}"
     local task_id="${1:-}"
-    
+    local cascade_flag="${2:-}"
+
     if [ ! -f "$prp_file" ]; then
         log_error "PRP file not found: $prp_file"
         exit 1
     fi
-    
+
     if [ -n "$task_id" ]; then
         # Reset specific task
-        local tmp_file=$(mktemp)
-        jq --arg id "$task_id" '
-            .features |= map(.tasks |= map(if .id == $id then .passes = false else . end))
-        ' "$prp_file" > "$tmp_file" && mv "$tmp_file" "$prp_file"
-        log_success "Reset task $task_id to passes: false"
+        if [ "$cascade_flag" = "--cascade" ]; then
+            # Reset with cascade
+            log_info "Resetting $task_id and all dependent tasks..."
+            local reset_list=$(reset_task_cascade "$task_id" "")
+
+            # Count and display reset tasks
+            local reset_count=0
+            local task_names=""
+            for tid in $reset_list; do
+                [ -z "$tid" ] && continue
+                reset_count=$((reset_count + 1))
+                if [ -z "$task_names" ]; then
+                    task_names="$tid"
+                else
+                    task_names="$task_names, $tid"
+                fi
+            done
+
+            log_success "Reset $reset_count task(s) in cascade: $task_names"
+        else
+            # Reset single task (backward compatible)
+            local tmp_file=$(mktemp)
+            jq --arg id "$task_id" '
+                .features |= map(.tasks |= map(if .id == $id then .passes = false else . end))
+            ' "$prp_file" > "$tmp_file" && mv "$tmp_file" "$prp_file"
+            log_success "Reset task $task_id to passes: false"
+        fi
     else
         # Reset all tasks
         local tmp_file=$(mktemp)
@@ -661,7 +927,7 @@ run_reset() {
         local count=$(jq '[.features[].tasks[]] | length' "$prp_file")
         log_success "Reset all $count tasks to passes: false"
     fi
-    
+
     # Also clear progress file
     if [ -f "$PROGRESS_FILE" ]; then
         echo "# Progress reset at $(timestamp)" > "$PROGRESS_FILE"
@@ -678,12 +944,13 @@ show_help() {
     echo "Usage: saci.sh <command> [options]"
     echo ""
     echo "Commands:"
-    echo "  scan              Scan codebase and auto-detect context"
-    echo "  init              Interactively generate PRP from your idea"
-    echo "  analyze <file>    Analyze a file and suggest patterns/hints"
-    echo "  reset [task-id]   Reset all tasks (or specific task) to passes: false"
-    echo "  status            Show task progress with nice TUI (requires gum)"
-    echo "  jump              Execute the Ralph loop (default)"
+    echo "  scan                     Scan codebase and auto-detect context"
+    echo "  init                     Interactively generate PRP from your idea"
+    echo "  analyze <file>           Analyze a file and suggest patterns/hints"
+    echo "  reset [task-id]          Reset all tasks (or specific task) to passes: false"
+    echo "  reset <task-id> --cascade Reset task and all dependent tasks recursively"
+    echo "  status                   Show task progress with nice TUI (requires gum)"
+    echo "  jump                     Execute the Ralph loop (default)"
     echo ""
     echo "Jump Options:"
     echo "  --dry-run           Show what would be done without executing"

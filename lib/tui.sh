@@ -55,17 +55,43 @@ tui_log() {
 tui_task_list() {
     local prp_file="$1"
     local current_task="$2"
-    
-    jq -r --arg current "$current_task" '
-        .features[] | .tasks[] | 
-        if .id == $current then
-            "▶ \(.id) \(.title[0:25])"
-        elif .passes == true then
-            "■ \(.id) \(.title[0:25])"
+
+    # We need to source saci.sh to use check_dependencies_met()
+    # This assumes saci.sh is in the parent directory
+    local saci_path="$(dirname "${BASH_SOURCE[0]}")/../saci.sh"
+    if [ -f "$saci_path" ]; then
+        source "$saci_path"
+    fi
+
+    # Get all tasks and check their status
+    jq -r '.features[] | .tasks[] | "\(.id)|\(.title[0:25])|\(.passes // false)|\(.dependencies // [])"' "$prp_file" 2>/dev/null | while IFS='|' read -r task_id title passes deps; do
+        local icon
+
+        if [ "$task_id" = "$current_task" ]; then
+            icon="▶"
+        elif [ "$passes" = "true" ]; then
+            icon="■"
         else
-            "□ \(.id) \(.title[0:25])"
-        end
-    ' "$prp_file" 2>/dev/null
+            # Check if task is blocked by unsatisfied dependencies
+            if [ "$deps" != "[]" ] && [ -n "$deps" ]; then
+                # Temporarily set PRP_FILE for dependency check
+                local old_prp="$PRP_FILE"
+                export PRP_FILE="$prp_file"
+
+                if ! check_dependencies_met "$task_id" 2>/dev/null; then
+                    icon="⊗"
+                else
+                    icon="□"
+                fi
+
+                export PRP_FILE="$old_prp"
+            else
+                icon="□"
+            fi
+        fi
+
+        echo "$icon $task_id $title"
+    done
 }
 
 # Render the full TUI
@@ -244,14 +270,39 @@ show_status() {
     
     echo ""
     
-    # Task list
-    jq -r '.features[] | .tasks[] | 
-        if .passes == true then
-            "  ✓ \(.id): \(.title)"
+    # Task list - source saci.sh for dependency functions
+    local saci_path="$(dirname "${BASH_SOURCE[0]}")/../saci.sh"
+    if [ -f "$saci_path" ]; then
+        source "$saci_path"
+    fi
+
+    # Show tasks with dependency information
+    jq -r '.features[] | .tasks[] | "\(.id)|\(.title)|\(.passes // false)|\(.dependencies // [])"' "$prp_file" | while IFS='|' read -r task_id title passes deps; do
+        if [ "$passes" = "true" ]; then
+            echo "  ✓ $task_id: $title"
         else
-            "  ○ \(.id): \(.title)"
-        end
-    ' "$prp_file"
+            # Check if blocked
+            local status_line="  ○ $task_id: $title"
+
+            if [ "$deps" != "[]" ] && [ -n "$deps" ]; then
+                # Temporarily set PRP_FILE for dependency check
+                local old_prp="$PRP_FILE"
+                export PRP_FILE="$prp_file"
+
+                if ! check_dependencies_met "$task_id" 2>/dev/null; then
+                    # Get blocked dependencies
+                    local blocked=$(get_blocked_dependencies "$task_id" 2>/dev/null)
+                    if [ -n "$blocked" ]; then
+                        status_line="$status_line [depends on: $blocked]"
+                    fi
+                fi
+
+                export PRP_FILE="$old_prp"
+            fi
+
+            echo "$status_line"
+        fi
+    done
     
     echo ""
 }
