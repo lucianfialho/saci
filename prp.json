@@ -232,7 +232,7 @@
           "title": "Add integration tests for dependency system",
           "description": "Criar script de teste que valida cenários principais do sistema de dependências",
           "priority": 7,
-          "passes": false,
+          "passes": true,
           "dependencies": [
             "F1-T2",
             "F1-T3",
