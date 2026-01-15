@@ -12,7 +12,7 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${BLUE}🔥 Saci Installer${NC}"
+echo -e "${BLUE}🌪️ Saci Installer${NC}"
 
 # Detect install directory
 if [ -w "/usr/local/bin" ]; then

@@ -18,7 +18,7 @@ BRANCH="${SACI_BRANCH:-main}"
 
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BLUE}  🔥 Saci Installer${NC}"
+echo -e "${BLUE}  🌪️ Saci Installer${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -120,7 +120,7 @@ echo "Usage:"
 echo "  cd your-project"
 echo "  saci scan      # Detect stack"
 echo "  saci init      # Create PRP"
-echo "  saci run       # Execute loop"
+echo "  saci jump      # Execute loop"
 echo ""
 
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && [[ "$INSTALL_DIR" == "$HOME/.local/bin" ]]; then
