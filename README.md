@@ -15,7 +15,7 @@ Saci is an autonomous loop that runs [Claude Code](https://docs.anthropic.com/en
 | Auto rollback (git reset) | ❌ | ✅ |
 | Pass previous error to retry | ❌ | ✅ |
 | Stack scanner | ❌ | ✅ `saci scan` |
-| Interactive PRP generator | ❌ | ✅ `saci init` |
+| Interactive PRP generator | ❌ | ✅ `saci init` + `/prp` skill (native mode) |
 | Pattern analyzer | ❌ | ✅ `saci analyze` |
 | **Intelligent hooks** | ❌ | ✅ **4 hooks: validate, classify, prevent stop, context** |
 | **Error classification** | ❌ | ✅ **ENVIRONMENT vs CODE auto-detection** |
@@ -368,17 +368,28 @@ Tasks blocked by dependencies show: `⊗ F1-T3 [depends on: F1-T1, F1-T2]`
 
 ## PRP Skill
 
-Saci installs a skill in Claude Code to generate PRPs:
+Saci installs a skill in Claude Code to generate PRPs with **native interactive mode**:
 
 ```
-> skill prp
+> claude /prp
 > "I want to add a priority system"
 
-[Saci asks questions: 1A, 2B, 3C]
-> 1A, 2C, 3B
+[Interactive UI appears with native questions:]
+○ What is the scope? → Minimal MVP ✓
+○ What is the goal? → New capability ✓
+○ Who is the target user? → All users ✓
+☑ Success criteria → [x] Faster workflows, [x] Better metrics
 
 [Generates: tasks/prp-priority.md + prp.json]
 ```
+
+**Why native mode?**
+- ✨ Rich UI with descriptions for each option
+- ⚡ Faster input (click vs type)
+- ✅ Structured answers (no parsing errors)
+- 🔄 Easy to change selections
+
+**Alternative:** You can still use `saci init` for terminal-based questionnaire.
 
 ## Visual UI Verification (Optional)
 

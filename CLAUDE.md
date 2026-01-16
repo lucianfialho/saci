@@ -42,6 +42,49 @@ Exemplo: Para validar comandos Bash ANTES de executar, use `PreToolUse` hooks ao
 
 ---
 
+## 📝 Criando PRPs (Product Requirement Plans)
+
+**IMPORTANTE:** Para criar PRPs, use a skill `/prp` que utiliza **interactive mode nativo** do Claude Code.
+
+### Como Usar:
+
+```
+claude /prp
+> "Add user authentication system"
+
+[Interactive UI with native questions will appear]
+```
+
+### O Que Acontece:
+
+1. **AskUserQuestion tool é chamado** - Interface nativa do Claude Code
+2. **4 perguntas estruturadas:**
+   - Scope (MVP vs full vs backend-only vs frontend-only)
+   - Goal (UX, performance, new capability, tech debt)
+   - Target users (new, power, all, admins)
+   - Success criteria (multiselect)
+3. **Respostas estruturadas** - Não precisa parsear texto livre
+4. **PRP gerado** - Baseado nas respostas, gera `tasks/prp-[feature].md` + `prp.json`
+
+### Vantagens vs Texto Livre:
+
+- ✨ UI rica com descrições detalhadas por opção
+- ✅ Validação automática de inputs
+- ⚡ Mais rápido para o usuário (click vs digitar)
+- 📊 Dados estruturados e consistentes
+
+### Skill Definition:
+
+A skill está em `templates/skills/prp/SKILL.md` e contém:
+- Exemplo completo de como chamar `AskUserQuestion`
+- Instruções sobre como usar as respostas
+- Guia de sizing de tasks (1 task = 1 context window)
+- Template do PRP document + JSON
+
+**Alternativa:** `saci init` ainda existe para questionnaire terminal-based, mas `/prp` skill é o método recomendado.
+
+---
+
 ## ✅ Features Implementadas
 
 ### 1. Sistema de Hooks (✅ COMPLETO)
