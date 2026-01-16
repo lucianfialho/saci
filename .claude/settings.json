@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.saci/hooks/validate-bash.py",
+            "command": "$HOME/.local/share/saci/.saci/hooks/validate-bash.py",
             "timeout": 5
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.saci/hooks/check-test-output.py",
+            "command": "$HOME/.local/share/saci/.saci/hooks/check-test-output.py",
             "timeout": 10
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.saci/hooks/add-context.sh",
+            "command": "$HOME/.local/share/saci/.saci/hooks/add-context.sh",
             "timeout": 5
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.saci/hooks/check-if-done.py",
+            "command": "$HOME/.local/share/saci/.saci/hooks/check-if-done.py",
             "timeout": 5
           }
         ]
