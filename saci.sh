@@ -640,19 +640,42 @@ $test_output
     else
         rm -f "$prompt_file" "$cli_output_file"
         log_error "$CLI_PROVIDER session failed"
-        
-        # Rollback on Claude failure too
-        if [ -n "$git_checkpoint" ]; then
-            log_info "Rolling back to checkpoint ${git_checkpoint:0:7}..."
-            git reset --hard "$git_checkpoint" 2>/dev/null || true
-            git clean -fd -e prp.json -e progress.txt 2>/dev/null || true
-        fi
-        
-        log_progress "$task_id" "❌ SESSION FAILED" "
+
+        # ================================================================
+        # CHECK IF USEFUL WORK WAS DONE BEFORE FAILURE
+        # ================================================================
+        local changed_files=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+
+        if [ "$changed_files" -gt 0 ]; then
+            # Files were modified before the session failed
+            # This could be due to API errors, timeouts, or network issues
+            # PRESERVE the changes and let the next iteration decide what to do
+            log_warning "Session failed but $changed_files file(s) were modified - preserving changes for retry"
+            LAST_ERROR="Claude Code session failed (possibly API error), but changes were preserved. Review the changes and retry."
+
+            log_progress "$task_id" "⚠️ SESSION FAILED (CHANGES PRESERVED)" "
 **Iteration:** $iteration
 **Result:** Claude Code session encountered an error
-**Action:** Rolled back, will retry
+**Files Modified:** $changed_files
+**Action:** Changes preserved, will retry with existing work
 "
+        else
+            # No changes were made AND session failed - safe to rollback
+            log_warning "Session failed with no changes made - rolling back to clean state"
+            if [ -n "$git_checkpoint" ]; then
+                log_info "Rolling back to checkpoint ${git_checkpoint:0:7}..."
+                git reset --hard "$git_checkpoint" 2>/dev/null || true
+                git clean -fd -e prp.json -e progress.txt 2>/dev/null || true
+            fi
+            LAST_ERROR="Claude Code session failed with no changes. This may indicate a prompt issue or API problem."
+
+            log_progress "$task_id" "❌ SESSION FAILED (ROLLED BACK)" "
+**Iteration:** $iteration
+**Result:** Claude Code session encountered an error
+**Action:** Rolled back to clean state, will retry
+"
+        fi
+
         return 1
     fi
 }
