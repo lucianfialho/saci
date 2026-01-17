@@ -1488,7 +1488,7 @@ run_validate() {
     # ========================================================================
     # Display validation summary
     # ========================================================================
-    display_validation_summary "$prp_file" "$validation_errors" "$validation_warnings" "${suggestions[@]}"
+    display_validation_summary "$prp_file" "$validation_errors" "$validation_warnings" "${suggestions[@]+"${suggestions[@]}"}"
 
     if [ "$validation_errors" -gt 0 ]; then
         return 1
