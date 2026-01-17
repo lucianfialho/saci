@@ -47,9 +47,87 @@ tui_cleanup() {
 
 tui_log() {
     local message="$1"
-    local timestamp=$(date '+%H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%H:%M:%S')
     echo "[$timestamp] $message" >> "$TUI_LOG_FILE"
 }
+
+# ============================================================================
+# Token Metrics Functions
+# ============================================================================
+
+# Cache for metrics summary to avoid recalculating on every render
+METRICS_CACHE=""
+METRICS_CACHE_TIME=0
+
+# Calculate total tokens used from metrics.jsonl
+calculate_total_tokens() {
+    if [ -f .saci/metrics.jsonl ]; then
+        jq -s 'map(.total_tokens) | add // 0' .saci/metrics.jsonl 2>/dev/null || echo "0"
+    else
+        echo "0"
+    fi
+}
+
+# Calculate total cost from metrics.jsonl
+calculate_total_cost() {
+    if [ -f .saci/metrics.jsonl ]; then
+        jq -s 'map(.cost_usd) | add // 0' .saci/metrics.jsonl 2>/dev/null || echo "0.000000"
+    else
+        echo "0.000000"
+    fi
+}
+
+# Calculate comprehensive metrics summary
+# Returns: JSON object with all aggregate stats
+# Format: {"total_tokens":N,"cost_usd":N.N,"avg_time_ms":N,"success_rate":N.N,"error_counts":{"TYPE":N}}
+calculate_metrics_summary() {
+    # Check if metrics file exists
+    if [ ! -f .saci/metrics.jsonl ]; then
+        echo '{"total_tokens":0,"cost_usd":0.0,"avg_time_ms":0,"success_rate":0.0,"error_counts":{}}'
+        return
+    fi
+
+    # Check cache (valid for 5 seconds to optimize frequent renders)
+    local current_time
+    current_time=$(date +%s)
+    if [ -n "$METRICS_CACHE" ] && [ $((current_time - METRICS_CACHE_TIME)) -lt 5 ]; then
+        echo "$METRICS_CACHE"
+        return
+    fi
+
+    # Use jq streaming mode for performance with large files
+    local summary
+    summary=$(jq -s '
+        {
+            total_tokens: (map(.total_tokens) | add // 0),
+            cost_usd: (map(.cost_usd) | add // 0.0),
+            avg_time_ms: (if length > 0 then (map(.duration_ms) | add / length) else 0 end),
+            success_rate: (if length > 0 then ((map(select(.result == "success")) | length) * 100.0 / length) else 0.0 end),
+            error_counts: (
+                map(select(.error_type != ""))
+                | group_by(.error_type)
+                | map({key: .[0].error_type, value: length})
+                | from_entries
+            )
+        }
+    ' .saci/metrics.jsonl 2>/dev/null)
+
+    # If jq fails, return zeros
+    if [ -z "$summary" ]; then
+        summary='{"total_tokens":0,"cost_usd":0.0,"avg_time_ms":0,"success_rate":0.0,"error_counts":{}}'
+    fi
+
+    # Update cache
+    METRICS_CACHE="$summary"
+    METRICS_CACHE_TIME=$current_time
+
+    echo "$summary"
+}
+
+# ============================================================================
+# Task List Generation
+# ============================================================================
 
 # Generate task list with status icons
 tui_task_list() {
@@ -58,8 +136,10 @@ tui_task_list() {
 
     # We need to source saci.sh to use check_dependencies_met()
     # This assumes saci.sh is in the parent directory
-    local saci_path="$(dirname "${BASH_SOURCE[0]}")/../saci.sh"
+    local saci_path
+    saci_path="$(dirname "${BASH_SOURCE[0]}")/../saci.sh"
     if [ -f "$saci_path" ]; then
+        # shellcheck source=../saci.sh
         source "$saci_path"
     fi
 
@@ -102,8 +182,10 @@ tui_render() {
     
     [ "$TUI_ENABLED" != "true" ] && return
     
-    local completed=$(jq '[.features[].tasks[] | select(.passes == true)] | length' "$prp_file" 2>/dev/null || echo 0)
-    local total=$(jq '[.features[].tasks[]] | length' "$prp_file" 2>/dev/null || echo 0)
+    local completed
+    local total
+    completed=$(jq '[.features[].tasks[] | select(.passes == true)] | length' "$prp_file" 2>/dev/null || echo 0)
+    total=$(jq '[.features[].tasks[]] | length' "$prp_file" 2>/dev/null || echo 0)
     local percent=0
     [ "$total" -gt 0 ] && percent=$((completed * 100 / total))
     
@@ -115,30 +197,46 @@ tui_render() {
     local progress_bar=""
     for ((i=0; i<filled; i++)); do progress_bar+="█"; done
     for ((i=0; i<empty; i++)); do progress_bar+="░"; done
-    
+
+    # Token metrics
+    local total_tokens
+    local total_cost
+    total_tokens=$(calculate_total_tokens)
+    total_cost=$(calculate_total_cost)
+
+    # Format cost with proper decimal places
+    local cost_display
+    cost_display=$(printf "%.4f" "$total_cost")
+
     # Task list
-    local tasks=$(tui_task_list "$prp_file" "$current_task")
-    
-    # Build left panel content
+    local tasks
+    tasks=$(tui_task_list "$prp_file" "$current_task")
+
+    # Build left panel content with token metrics
     local left_content="Tasks ($completed/$total)
 
 $tasks
 
-$progress_bar $percent%"
+$progress_bar $percent%
+
+Tokens: $total_tokens (\$$cost_display USD)"
 
     # Build right panel content (last 10 log lines)
-    local right_content="Log
+    local right_content
+    right_content="Log
 
 $(tail -10 "$TUI_LOG_FILE" 2>/dev/null || echo 'Starting...')"
 
     # Style panels
-    local left_panel=$(echo "$left_content" | gum style \
+    local left_panel
+    left_panel=$(echo "$left_content" | gum style \
         --border normal \
         --border-foreground 212 \
         --padding "1 2" \
         --width 35)
-    
-    local right_panel=$(echo "$right_content" | gum style \
+
+    local right_panel
+    right_panel=$(echo "$right_content" | gum style \
         --border normal \
         --border-foreground 240 \
         --padding "1 2" \
@@ -239,9 +337,12 @@ show_status() {
         return
     fi
     
-    local project_name=$(jq -r '.project.name // "Unknown"' "$prp_file")
-    local completed=$(jq '[.features[].tasks[] | select(.passes == true)] | length' "$prp_file")
-    local total=$(jq '[.features[].tasks[]] | length' "$prp_file")
+    local project_name
+    local completed
+    local total
+    project_name=$(jq -r '.project.name // "Unknown"' "$prp_file")
+    completed=$(jq '[.features[].tasks[] | select(.passes == true)] | length' "$prp_file")
+    total=$(jq '[.features[].tasks[]] | length' "$prp_file")
     local percent=$((total > 0 ? completed * 100 / total : 0))
     
     # Header
@@ -271,8 +372,10 @@ show_status() {
     echo ""
     
     # Task list - source saci.sh for dependency functions
-    local saci_path="$(dirname "${BASH_SOURCE[0]}")/../saci.sh"
+    local saci_path
+    saci_path="$(dirname "${BASH_SOURCE[0]}")/../saci.sh"
     if [ -f "$saci_path" ]; then
+        # shellcheck source=../saci.sh
         source "$saci_path"
     fi
 
@@ -291,7 +394,8 @@ show_status() {
 
                 if ! check_dependencies_met "$task_id" 2>/dev/null; then
                     # Get blocked dependencies
-                    local blocked=$(get_blocked_dependencies "$task_id" 2>/dev/null)
+                    local blocked
+                    blocked=$(get_blocked_dependencies "$task_id" 2>/dev/null)
                     if [ -n "$blocked" ]; then
                         status_line="$status_line [depends on: $blocked]"
                     fi
@@ -316,14 +420,16 @@ pick_task() {
     
     check_gum || return 1
     
-    local tasks=$(jq -r '.features[].tasks[] | "\(.id): \(.title) [\(if .passes then "✓" else "○" end)]"' "$prp_file")
-    
+    local tasks
+    tasks=$(jq -r '.features[].tasks[] | "\(.id): \(.title) [\(if .passes then "✓" else "○" end)]"' "$prp_file")
+
     if [ -z "$tasks" ]; then
         echo "No tasks found in $prp_file"
         return 1
     fi
-    
-    local selected=$(echo "$tasks" | gum filter --placeholder "Select a task...")
+
+    local selected
+    selected=$(echo "$tasks" | gum filter --placeholder "Select a task...")
     
     if [ -n "$selected" ]; then
         echo "${selected%%:*}"
