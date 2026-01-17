@@ -87,8 +87,17 @@ log_progress() {
     local task_id="$1"
     local status="$2"
     local message="$3"
+    local tokens="${4:-0}"        # Optional: tokens used
+    local cost_usd="${5:-0.00}"   # Optional: cost in USD
+
     echo "" >> "$PROGRESS_FILE"
     echo "## [$(timestamp)] Task $task_id - $status" >> "$PROGRESS_FILE"
+
+    # Add metrics if available (tokens != 0)
+    if [ "$tokens" != "0" ] && [ "$tokens" != "N/A" ]; then
+        echo "**Tokens:** $tokens (\$$cost_usd USD)" >> "$PROGRESS_FILE"
+    fi
+
     echo "$message" >> "$PROGRESS_FILE"
 }
 
@@ -385,6 +394,90 @@ validate_dependencies() {
 # Prompt Builder
 # ============================================================================
 
+# Detect task domain based on context hints (files, libraries, description)
+detect_task_domain() {
+    local task_id="$1"
+
+    # Get files and libraries from task context
+    local files=$(jq -r --arg id "$task_id" '
+        .features[].tasks[] | select(.id == $id) |
+        .context.files // [] | join(" ")
+    ' "$PRP_FILE" 2>/dev/null || echo "")
+
+    local libraries=$(jq -r --arg id "$task_id" '
+        .features[].tasks[] | select(.id == $id) |
+        .context.libraries // [] | join(" ")
+    ' "$PRP_FILE" 2>/dev/null || echo "")
+
+    local description=$(get_task_field "$task_id" "description")
+
+    local hints=$(jq -r --arg id "$task_id" '
+        .features[].tasks[] | select(.id == $id) |
+        .context.hints // [] | join(" ")
+    ' "$PRP_FILE" 2>/dev/null || echo "")
+
+    # Combine all context for domain detection
+    local combined="$files $libraries $description $hints"
+
+    # Frontend detection
+    if echo "$combined" | grep -qiE "(react|component|tsx|jsx|css|ui|frontend|tailwind|styled|vue|angular|svelte)"; then
+        echo "frontend"
+        return
+    fi
+
+    # Backend detection
+    if echo "$combined" | grep -qiE "(api|database|server|endpoint|migration|prisma|sql|postgres|mysql|mongodb|express|fastify)"; then
+        echo "backend"
+        return
+    fi
+
+    # DevOps detection
+    if echo "$combined" | grep -qiE "(deploy|ci|cd|docker|kubernetes|infra|github.*action|workflow|terraform|aws|gcp|azure)"; then
+        echo "devops"
+        return
+    fi
+
+    # Testing detection
+    if echo "$combined" | grep -qiE "(test|spec|jest|vitest|playwright|cypress|mocha|testing)"; then
+        echo "testing"
+        return
+    fi
+
+    # Documentation detection
+    if echo "$combined" | grep -qiE "(readme|docs|documentation|\.md|guide|tutorial)"; then
+        echo "documentation"
+        return
+    fi
+
+    # Default to generic
+    echo "generic"
+}
+
+# Detect task type based on title and description
+detect_task_type() {
+    local task_id="$1"
+    local title=$(get_task_field "$task_id" "title")
+    local description=$(get_task_field "$task_id" "description")
+
+    # Combine for analysis
+    local combined="$title $description"
+
+    # Bug fix detection
+    if echo "$combined" | grep -qiE "(fix|bug|issue|error|crash|broken|resolve)"; then
+        echo "bugfix"
+        return
+    fi
+
+    # Refactor detection
+    if echo "$combined" | grep -qiE "(refactor|cleanup|improve|optimize|reorganize|restructure)"; then
+        echo "refactor"
+        return
+    fi
+
+    # Default to feature
+    echo "feature"
+}
+
 build_task_prompt() {
     local task_id="$1"
     local iteration="$2"
@@ -394,20 +487,80 @@ build_task_prompt() {
     local context=$(get_task_context "$task_id")
     local acceptance=$(get_acceptance_criteria "$task_id")
     local test_cmd=$(get_test_command "$task_id")
-    
-    # Read system prompt
-    local system_prompt=""
-    if [ -f "$PROMPT_FILE" ]; then
-        system_prompt=$(cat "$PROMPT_FILE")
+
+    # ================================================================
+    # NEW: Smart template selection based on domain and task type
+    # ================================================================
+    local domain=$(detect_task_domain "$task_id")
+    local task_type=$(detect_task_type "$task_id")
+
+    # Build PRP template paths
+    local prp_base="$SCRIPT_DIR/templates/prp/base.md"
+    local prp_domain="$SCRIPT_DIR/templates/prp/domains/${domain}.md"
+    local prp_task_type="$SCRIPT_DIR/templates/prp/task-types/${task_type}.md"
+
+    # Assemble PRP layers
+    local prp_template=""
+
+    # Layer 1: Base (System + Interaction + Response)
+    if [ -f "$prp_base" ]; then
+        prp_template+=$(cat "$prp_base")
+        prp_template+=$'\n\n---\n\n'
     fi
-    
-    # Read progress file for previous attempts context
+
+    # Layer 2: Domain-specific context
+    if [ -f "$prp_domain" ]; then
+        prp_template+=$(cat "$prp_domain")
+        prp_template+=$'\n\n---\n\n'
+    fi
+
+    # Layer 3: Task type context
+    if [ -f "$prp_task_type" ]; then
+        prp_template+=$(cat "$prp_task_type")
+        prp_template+=$'\n\n---\n\n'
+    fi
+
+    # Fallback to legacy prompt.md if PRP templates don't exist
+    if [ -z "$prp_template" ] && [ -f "$PROMPT_FILE" ]; then
+        prp_template=$(cat "$PROMPT_FILE")
+        prp_template+=$'\n\n---\n\n'
+    fi
+
+    # ================================================================
+    # Task-specific context (from prp.json)
+    # ================================================================
+    local task_context="# Current Task: $title
+
+**Task ID:** $task_id
+**Iteration:** $iteration of $MAX_ITERATIONS
+**Domain:** $domain
+**Type:** $task_type
+
+## Available Skills
+- **prp**: For planning new features - generates spec document + prp.json.
+
+Refer to guidelines in default.md for implementation and debugging best practices.
+
+## Description
+$description
+
+## Context
+$context
+
+## Acceptance Criteria
+$acceptance
+
+## Test Command
+\`$test_cmd\`"
+
+    # ================================================================
+    # Historical context (progress.txt + errors)
+    # ================================================================
     local progress_context=""
     if [ -f "$PROGRESS_FILE" ] && [ -s "$PROGRESS_FILE" ]; then
-        progress_context=$(tail -100 "$PROGRESS_FILE")  # Last 100 lines only
+        progress_context=$(tail -100 "$PROGRESS_FILE")
     fi
-    
-    # Build error section if we have previous error
+
     local error_section=""
     if [ -n "$previous_error" ]; then
         error_section="
@@ -425,34 +578,13 @@ $previous_error
 Analyze the error above and fix the root cause, don't just retry the same thing.
 "
     fi
-    
-    # Build the complete prompt
+
+    # ================================================================
+    # Assemble final prompt
+    # ================================================================
     cat <<EOF
-$system_prompt
-
----
-
-# Current Task: $title
-
-**Task ID:** $task_id
-**Iteration:** $iteration of $MAX_ITERATIONS
-
-## Available Skills
-- **prp**: For planning new features - generates spec document + prp.json.
-
-Refer to guidelines in default.md for implementation and debugging best practices.
-
-## Description
-$description
-
-## Context
-$context
-
-## Acceptance Criteria
-$acceptance
-
-## Test Command
-\`$test_cmd\`
+$prp_template
+$task_context
 $error_section
 ---
 
@@ -464,14 +596,15 @@ $progress_context
 ## Instructions
 
 1. Read the previous progress above to understand what has been tried before
-2. Implement the task following the context hints
+2. Implement the task following the context hints and domain-specific guidelines
 3. Run the test command: \`$test_cmd\`
 4. If tests pass, commit with: "feat: $title [task-$task_id]"
 5. If tests fail, document what you tried and the errors
 
-**IMPORTANT:** 
+**IMPORTANT:**
 - This is iteration $iteration. If previous attempts failed, try a DIFFERENT approach.
 - Focus on completing ALL acceptance criteria.
+- Follow domain-specific best practices and patterns.
 
 Start implementing now.
 EOF
@@ -486,13 +619,104 @@ EOF
 LAST_ERROR=""
 LAST_APPROACH=""
 
+# ============================================================================
+# Token Tracking and Metrics Functions
+# ============================================================================
+
+# Extract tokens from CLI output (JSON format)
+extract_tokens_from_output() {
+    local output_file="$1"
+
+    # Check if file exists and is not empty
+    if [ ! -f "$output_file" ] || [ ! -s "$output_file" ]; then
+        echo "0,0,0,unknown"
+        return
+    fi
+
+    # Try to parse JSON output
+    if jq -e '.metadata.usage' "$output_file" >/dev/null 2>&1; then
+        local input_tokens=$(jq -r '.metadata.usage.input_tokens // 0' "$output_file")
+        local output_tokens=$(jq -r '.metadata.usage.output_tokens // 0' "$output_file")
+        local total_tokens=$((input_tokens + output_tokens))
+        local model=$(jq -r '.metadata.model // "unknown"' "$output_file")
+
+        echo "$input_tokens,$output_tokens,$total_tokens,$model"
+    else
+        # Fallback: no tokens available (older CLI version or non-JSON output)
+        echo "0,0,0,unknown"
+    fi
+}
+
+# Calculate cost in USD based on Claude pricing (as of 2026-01-16)
+# Pricing: https://www.anthropic.com/pricing
+calculate_cost() {
+    local model="$1"
+    local input_tokens="$2"
+    local output_tokens="$3"
+
+    # Skip if no tokens
+    if [ "$input_tokens" = "0" ] && [ "$output_tokens" = "0" ]; then
+        echo "0.000000"
+        return
+    fi
+
+    # Claude pricing per million tokens
+    local input_cost output_cost
+    case "$model" in
+        *"opus"*)
+            # Opus: $15/MTok input, $75/MTok output
+            input_cost=$(echo "scale=6; $input_tokens * 15 / 1000000" | bc)
+            output_cost=$(echo "scale=6; $output_tokens * 75 / 1000000" | bc)
+            ;;
+        *"haiku"*)
+            # Haiku: $0.25/MTok input, $1.25/MTok output
+            input_cost=$(echo "scale=6; $input_tokens * 0.25 / 1000000" | bc)
+            output_cost=$(echo "scale=6; $output_tokens * 1.25 / 1000000" | bc)
+            ;;
+        *"sonnet"*|*)
+            # Sonnet (default): $3/MTok input, $15/MTok output
+            input_cost=$(echo "scale=6; $input_tokens * 3 / 1000000" | bc)
+            output_cost=$(echo "scale=6; $output_tokens * 15 / 1000000" | bc)
+            ;;
+    esac
+
+    echo "scale=6; $input_cost + $output_cost" | bc
+}
+
+# Log metrics to .saci/metrics.jsonl
+log_metrics() {
+    local task_id="$1"
+    local iteration="$2"
+    local input_tokens="$3"
+    local output_tokens="$4"
+    local total_tokens="$5"
+    local model="$6"
+    local result="$7"           # "success" or "failed"
+    local duration_ms="$8"
+    local error_type="${9:-}"   # ENVIRONMENT, CODE, TIMEOUT, UNKNOWN, or empty
+
+    local timestamp=$(date -Iseconds)
+    local cost_usd=$(calculate_cost "$model" "$input_tokens" "$output_tokens")
+
+    # Ensure .saci directory exists
+    mkdir -p .saci
+
+    # Append to metrics.jsonl (one line per iteration)
+    cat >> .saci/metrics.jsonl <<EOF
+{"timestamp":"$timestamp","task_id":"$task_id","iteration":$iteration,"input_tokens":$input_tokens,"output_tokens":$output_tokens,"total_tokens":$total_tokens,"model":"$model","result":"$result","duration_ms":$duration_ms,"error_type":"$error_type","cost_usd":$cost_usd}
+EOF
+}
+
 run_single_iteration() {
     local task_id="$1"
     local iteration="$2"
     local previous_error="${3:-}"  # Error from previous iteration
     local title=$(get_task_field "$task_id" "title")
     local test_cmd=$(get_test_command "$task_id")
-    
+
+    # Start time tracking
+    local start_time=$(date +%s%3N)  # Milliseconds
+
     log_iteration "Running iteration $iteration for task $task_id: $title"
     
     # ========================================================================
@@ -539,7 +763,10 @@ run_single_iteration() {
         claude)
             # --print: non-interactive mode
             # --dangerously-skip-permissions: auto-approve all actions (required for autonomous execution)
-            cli_cmd="claude --print --dangerously-skip-permissions"
+            # --output-format json: Get structured output with token metadata
+            # --verbose: Detailed logging for debugging
+            # --max-turns: Fail-safe against runaway loops
+            cli_cmd="claude --print --dangerously-skip-permissions --output-format json --verbose --max-turns $MAX_ITERATIONS"
             ;;
         amp)
             cli_cmd="amp --print --dangerously-skip-permissions"
@@ -549,7 +776,22 @@ run_single_iteration() {
     # Run CLI with the prompt - this starts a NEW session
     if cat "$prompt_file" | $cli_cmd 2>&1 | tee "$cli_output_file"; then
         rm -f "$prompt_file"
-        
+
+        # ================================================================
+        # EXTRACT TOKENS FROM OUTPUT
+        # ================================================================
+        local end_time=$(date +%s%3N)
+        local duration_ms=$((end_time - start_time))
+
+        # Parse tokens from CLI output
+        IFS=',' read -r input_tokens output_tokens total_tokens model <<< "$(extract_tokens_from_output "$cli_output_file")"
+        local cost_usd=$(calculate_cost "$model" "$input_tokens" "$output_tokens")
+
+        # Log token info
+        if [ "$total_tokens" != "0" ]; then
+            log_info "Tokens: $total_tokens ($input_tokens in, $output_tokens out) - \$$cost_usd USD"
+        fi
+
         # ================================================================
         # CHECK IF ANY FILES WERE ACTUALLY MODIFIED
         # ================================================================
@@ -559,12 +801,22 @@ run_single_iteration() {
             local task_status=$(jq -r --arg id "$task_id" '.features[].tasks[] | select(.id == $id) | .passes' "$PRP_FILE")
             if [ "$task_status" = "true" ]; then
                 log_success "Task already marked as complete - skipping to next"
+
+                # Log metrics for this (already complete) iteration
+                log_metrics "$task_id" "$iteration" "$input_tokens" "$output_tokens" \
+                    "$total_tokens" "$model" "success" "$duration_ms" ""
+
                 rm -f "$cli_output_file"
                 return 0
             fi
-            
+
             log_warning "No files were modified - AI did not make any changes"
             LAST_ERROR="No files were modified. The AI session completed but did not create or edit any files. Please ensure you actually create/modify the required files."
+
+            # Log metrics for failed iteration (CODE error - didn't implement)
+            log_metrics "$task_id" "$iteration" "$input_tokens" "$output_tokens" \
+                "$total_tokens" "$model" "failed" "$duration_ms" "CODE"
+
             rm -f "$cli_output_file"
             return 1
         fi
@@ -578,7 +830,11 @@ run_single_iteration() {
             # Tests passed!
             log_success "Tests passed!"
             rm -f "$test_output_file" "$cli_output_file"
-            
+
+            # Log metrics for successful iteration
+            log_metrics "$task_id" "$iteration" "$input_tokens" "$output_tokens" \
+                "$total_tokens" "$model" "success" "$duration_ms" ""
+
             # Commit changes
             git add -A 2>/dev/null || true
             git commit -m "$(cat <<EOF
@@ -587,20 +843,20 @@ feat: $title [task-$task_id]
 Co-Authored-By: Saci <noreply@saci.sh>
 EOF
 )" 2>/dev/null || true
-            
+
             # Mark task complete
             mark_task_complete "$task_id"
-            
+
             # Clear error state
             LAST_ERROR=""
             LAST_APPROACH=""
-            
-            # Log success to progress
+
+            # Log success to progress with metrics
             log_progress "$task_id" "✅ COMPLETED" "
 **Iteration:** $iteration
 **Result:** All tests passed
 **Commit:** feat: $title [task-$task_id]
-"
+" "$total_tokens" "$cost_usd"
             return 0
         else
             # ================================================================
@@ -608,12 +864,16 @@ EOF
             # ================================================================
             local test_output=$(cat "$test_output_file" | tail -50)
             rm -f "$test_output_file"
-            
+
             log_warning "Tests failed on iteration $iteration"
-            
+
+            # Log metrics for failed iteration
+            log_metrics "$task_id" "$iteration" "$input_tokens" "$output_tokens" \
+                "$total_tokens" "$model" "failed" "$duration_ms" "CODE"
+
             # Store error for next iteration
             LAST_ERROR="$test_output"
-            
+
             # ================================================================
             # GIT ROLLBACK - Revert changes to clean state
             # ================================================================
@@ -623,8 +883,8 @@ EOF
                 git clean -fd -e prp.json -e progress.txt 2>/dev/null || true
                 log_success "Rollback complete"
             fi
-            
-            # Log detailed error to progress
+
+            # Log detailed error to progress with metrics
             log_progress "$task_id" "⚠️ TESTS FAILED" "
 **Iteration:** $iteration
 **Test Command:** $test_cmd
@@ -633,13 +893,23 @@ EOF
 $test_output
 \`\`\`
 **Action:** Rolled back changes, will retry with error context
-"
+" "$total_tokens" "$cost_usd"
             rm -f "$cli_output_file"
             return 1
         fi
     else
-        rm -f "$prompt_file" "$cli_output_file"
+        rm -f "$prompt_file"
         log_error "$CLI_PROVIDER session failed"
+
+        # Calculate duration even on failure
+        local end_time=$(date +%s%3N)
+        local duration_ms=$((end_time - start_time))
+
+        # Try to extract tokens (may be partial or unavailable)
+        IFS=',' read -r input_tokens output_tokens total_tokens model <<< "$(extract_tokens_from_output "$cli_output_file")"
+        local cost_usd=$(calculate_cost "$model" "$input_tokens" "$output_tokens")
+
+        rm -f "$cli_output_file"
 
         # ================================================================
         # CHECK IF USEFUL WORK WAS DONE BEFORE FAILURE
@@ -653,12 +923,16 @@ $test_output
             log_warning "Session failed but $changed_files file(s) were modified - preserving changes for retry"
             LAST_ERROR="Claude Code session failed (possibly API error), but changes were preserved. Review the changes and retry."
 
+            # Log metrics for failed session (ENVIRONMENT error type since it's likely API/network)
+            log_metrics "$task_id" "$iteration" "$input_tokens" "$output_tokens" \
+                "$total_tokens" "$model" "failed" "$duration_ms" "ENVIRONMENT"
+
             log_progress "$task_id" "⚠️ SESSION FAILED (CHANGES PRESERVED)" "
 **Iteration:** $iteration
 **Result:** Claude Code session encountered an error
 **Files Modified:** $changed_files
 **Action:** Changes preserved, will retry with existing work
-"
+" "$total_tokens" "$cost_usd"
         else
             # No changes were made AND session failed - safe to rollback
             log_warning "Session failed with no changes made - rolling back to clean state"
@@ -669,11 +943,15 @@ $test_output
             fi
             LAST_ERROR="Claude Code session failed with no changes. This may indicate a prompt issue or API problem."
 
+            # Log metrics for failed session
+            log_metrics "$task_id" "$iteration" "$input_tokens" "$output_tokens" \
+                "$total_tokens" "$model" "failed" "$duration_ms" "ENVIRONMENT"
+
             log_progress "$task_id" "❌ SESSION FAILED (ROLLED BACK)" "
 **Iteration:** $iteration
 **Result:** Claude Code session encountered an error
 **Action:** Rolled back to clean state, will retry
-"
+" "$total_tokens" "$cost_usd"
         fi
 
         return 1
