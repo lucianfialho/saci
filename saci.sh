@@ -676,28 +676,30 @@ LAST_APPROACH=""
 # Token Tracking and Metrics Functions
 # ============================================================================
 
-# Extract tokens from CLI output (JSON format)
+# Extract tokens and cost from CLI output (JSON format)
+# Returns: input_tokens,output_tokens,total_tokens,model,cost_usd
 extract_tokens_from_output() {
     local output_file="$1"
 
     # Check if file exists and is not empty
     if [ ! -f "$output_file" ] || [ ! -s "$output_file" ]; then
-        echo "0,0,0,unknown"
+        echo "0,0,0,unknown,0.000000"
         return
     fi
 
-    # Try to parse JSON output
-    if jq -e '.metadata.usage' "$output_file" >/dev/null 2>&1; then
-        local input_tokens=$(jq -r '.metadata.usage.input_tokens // 0' "$output_file")
-        local output_tokens=$(jq -r '.metadata.usage.output_tokens // 0' "$output_file")
-        local total_tokens=$((input_tokens + output_tokens))
-        local model=$(jq -r '.metadata.model // "unknown"' "$output_file")
+    # Claude CLI with --output-format json outputs a JSON array
+    # Find the result object (object with type:"result")
+    local input_tokens=$(jq -r '.[] | select(.type == "result") | .usage.input_tokens // 0' "$output_file" 2>/dev/null || echo "0")
+    local output_tokens=$(jq -r '.[] | select(.type == "result") | .usage.output_tokens // 0' "$output_file" 2>/dev/null || echo "0")
+    local total_tokens=$((input_tokens + output_tokens))
 
-        echo "$input_tokens,$output_tokens,$total_tokens,$model"
-    else
-        # Fallback: no tokens available (older CLI version or non-JSON output)
-        echo "0,0,0,unknown"
-    fi
+    # Extract model from modelUsage (first model key)
+    local model=$(jq -r '.[] | select(.type == "result") | .modelUsage | keys[0] // "unknown"' "$output_file" 2>/dev/null || echo "unknown")
+
+    # Extract cost (Claude CLI calculates this for us)
+    local cost_usd=$(jq -r '.[] | select(.type == "result") | .total_cost_usd // 0' "$output_file" 2>/dev/null || echo "0")
+
+    echo "$input_tokens,$output_tokens,$total_tokens,$model,$cost_usd"
 }
 
 # Calculate cost in USD based on Claude pricing (as of 2026-01-16)
@@ -837,9 +839,13 @@ run_single_iteration() {
         local end_time=$(($(date +%s) * 1000))
         local duration_ms=$((end_time - start_time))
 
-        # Parse tokens from CLI output
-        IFS=',' read -r input_tokens output_tokens total_tokens model <<< "$(extract_tokens_from_output "$cli_output_file")"
-        local cost_usd=$(calculate_cost "$model" "$input_tokens" "$output_tokens")
+        # Parse tokens and cost from CLI output
+        IFS=',' read -r input_tokens output_tokens total_tokens model cost_usd <<< "$(extract_tokens_from_output "$cli_output_file")"
+
+        # Fallback to calculate_cost if cost not available from CLI
+        if [ "$cost_usd" = "0" ] || [ "$cost_usd" = "0.000000" ]; then
+            cost_usd=$(calculate_cost "$model" "$input_tokens" "$output_tokens")
+        fi
 
         # Log token info
         if [ "$total_tokens" != "0" ]; then
@@ -965,9 +971,13 @@ $test_output
         local end_time=$(($(date +%s) * 1000))
         local duration_ms=$((end_time - start_time))
 
-        # Try to extract tokens (may be partial or unavailable)
-        IFS=',' read -r input_tokens output_tokens total_tokens model <<< "$(extract_tokens_from_output "$cli_output_file")"
-        local cost_usd=$(calculate_cost "$model" "$input_tokens" "$output_tokens")
+        # Try to extract tokens and cost (may be partial or unavailable)
+        IFS=',' read -r input_tokens output_tokens total_tokens model cost_usd <<< "$(extract_tokens_from_output "$cli_output_file")"
+
+        # Fallback to calculate_cost if cost not available from CLI
+        if [ "$cost_usd" = "0" ] || [ "$cost_usd" = "0.000000" ]; then
+            cost_usd=$(calculate_cost "$model" "$input_tokens" "$output_tokens")
+        fi
 
         rm -f "$cli_output_file"
 
