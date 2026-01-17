@@ -1,44 +1,40 @@
 {
   "project": {
     "name": "Saci",
-    "description": "Sistema de Dependências de Tarefas - Saci construindo Saci 🌪️",
-    "branchName": "saci/dependencies-system"
+    "description": "Saci Validate Command - Comprehensive PRP validation with educational feedback",
+    "branchName": "saci/validate-command"
   },
   "features": [
     {
       "id": "F1",
-      "name": "Dependency System Core",
-      "description": "Implementar sistema completo de dependências entre tarefas",
+      "name": "Saci Validate Command",
+      "description": "Add comprehensive validation for PRP files to prevent runtime errors and educate users",
       "priority": 1,
       "tasks": [
         {
           "id": "F1-T1",
-          "title": "Add dependency helper functions to saci.sh",
-          "description": "Implementar funções base para manipular dependências: get_task_dependencies(), get_dependency_mode(), check_dependencies_met(), get_blocked_dependencies()",
+          "title": "Add validate command structure",
+          "description": "Add 'validate' command case to saci.sh with basic structure and help text",
           "priority": 1,
-          "passes": true,
-          "dependencies": [],
+          "passes": false,
           "context": {
-            "files": [
-              "saci.sh"
-            ],
+            "files": ["saci.sh"],
             "libraries": [],
             "hints": [
-              "Adicionar após linha 189 (depois de get_feature_for_task)",
-              "Usar jq para extrair campos dependencies e dependencyMode",
-              "get_task_dependencies retorna array de IDs",
-              "get_dependency_mode retorna 'all' ou 'any' (default: 'all')",
-              "check_dependencies_met valida se deps estão completas (passes: true)",
-              "Usar pattern consistente com outras funções jq existentes"
+              "Add case after 'status)' command (around line 1333)",
+              "Accept optional file path argument, default to prp.json",
+              "Create run_validate() function similar to run_reset()",
+              "Update show_help() to document validate command",
+              "Return exit code 0 on success, 1 on failure"
             ]
           },
           "acceptance": [
-            "get_task_dependencies() retorna array de dependency IDs",
-            "get_dependency_mode() retorna 'all' ou 'any'",
-            "check_dependencies_met() valida corretamente mode 'all'",
-            "check_dependencies_met() valida corretamente mode 'any'",
-            "Funções lidam com campos ausentes (backward compatible)",
-            "Script passa em bash -n (syntax check)"
+            "Command 'saci validate' executes without error",
+            "Accepts optional file path: 'saci validate custom.json'",
+            "Defaults to prp.json when no argument provided",
+            "Help text updated with validate command documentation",
+            "Returns exit code 0 when validation passes",
+            "Bash syntax check passes: bash -n saci.sh"
           ],
           "tests": {
             "command": "bash -n saci.sh && echo 'Syntax OK'"
@@ -46,34 +42,30 @@
         },
         {
           "id": "F1-T2",
-          "title": "Modify get_next_task() to respect dependencies",
-          "description": "Alterar lógica de seleção de próxima task para pular tasks com dependências não satisfeitas",
+          "title": "Validate JSON syntax and structure",
+          "description": "Implement validation for JSON syntax and required top-level fields",
           "priority": 2,
-          "passes": true,
-          "dependencies": [
-            "F1-T1"
-          ],
-          "dependencyMode": "all",
+          "passes": false,
+          "dependencies": ["F1-T1"],
           "context": {
-            "files": [
-              "saci.sh"
-            ],
-            "libraries": [],
+            "files": ["saci.sh"],
+            "libraries": ["jq"],
             "hints": [
-              "Modificar função na linha 124",
-              "Atual: jq filtra passes:false, ordena por priority, pega first",
-              "Novo: pegar candidatos, iterar, chamar check_dependencies_met(), retornar primeiro que passar",
-              "Se nenhum passar, retornar vazio (loop termina gracefully)",
-              "Testar com e sem dependencies field"
+              "Use jq to validate JSON syntax: jq empty file.json 2>&1",
+              "Check for required fields: .project, .features",
+              "Verify .features is array with length > 0",
+              "Extract line number from jq parse errors",
+              "Use existing color variables: RED, GREEN, YELLOW, NC"
             ]
           },
           "acceptance": [
-            "Tasks sem dependências são selecionadas normalmente",
-            "Tasks com dependências não-satisfeitas são puladas",
-            "Tasks com dependências satisfeitas são selecionadas",
-            "Ordem por priority é respeitada entre tasks elegíveis",
-            "Backward compatible (tasks sem dependencies field funcionam)",
-            "Script passa em bash -n"
+            "Detects invalid JSON syntax with error message",
+            "Shows line number for JSON parse errors",
+            "Verifies 'project' field exists",
+            "Verifies 'features' field exists and is array",
+            "Fails validation if features array is empty",
+            "Returns exit code 1 on validation failure",
+            "Bash syntax check passes: bash -n saci.sh"
           ],
           "tests": {
             "command": "bash -n saci.sh && echo 'Syntax OK'"
@@ -81,35 +73,32 @@
         },
         {
           "id": "F1-T3",
-          "title": "Add circular dependency detection",
-          "description": "Implementar validate_dependencies() e detect_circular_dependency() para detectar ciclos no startup",
+          "title": "Validate task structure and uniqueness",
+          "description": "Check all tasks have required fields, unique IDs, and correct formats",
           "priority": 3,
-          "passes": true,
-          "dependencies": [
-            "F1-T1"
-          ],
-          "dependencyMode": "all",
+          "passes": false,
+          "dependencies": ["F1-T2"],
           "context": {
-            "files": [
-              "saci.sh"
-            ],
-            "libraries": [],
+            "files": ["saci.sh"],
+            "libraries": ["jq"],
             "hints": [
-              "Adicionar funções após as helper functions de dependência",
-              "validate_dependencies() itera todas tasks com deps, chama detect_circular",
-              "detect_circular_dependency() usa DFS com visited tracking",
-              "Detectar ciclo: F1-T1 -> F1-T2 -> F1-T1",
-              "Logar caminho completo do ciclo detectado",
-              "Adicionar chamada no main() após check de prp.json (linha ~563)"
+              "Required task fields: id, title, description, priority, passes, context, acceptance, tests",
+              "Use jq to check field existence: has(\"fieldname\")",
+              "Validate ID format with regex: ^F[0-9]+-T[0-9]+$",
+              "Collect all task IDs and check for duplicates using sort | uniq -d",
+              "Check priority is number, passes is boolean, acceptance is non-empty array"
             ]
           },
           "acceptance": [
-            "Detecta ciclo simples (A->B->A)",
-            "Detecta ciclo longo (A->B->C->A)",
-            "Não reporta falso positivo em DAG válido",
-            "Loga caminho completo do ciclo",
-            "Exit com erro se ciclo detectado",
-            "Script passa em bash -n"
+            "Validates all required task fields are present",
+            "Detects duplicate task IDs across features",
+            "Validates task ID format matches F[num]-T[num]",
+            "Checks priority is a number",
+            "Ensures passes is boolean (true or false)",
+            "Verifies acceptance is non-empty array",
+            "Confirms tests.command field exists",
+            "Shows task ID and field name in error messages",
+            "Bash syntax check passes: bash -n saci.sh"
           ],
           "tests": {
             "command": "bash -n saci.sh && echo 'Syntax OK'"
@@ -117,197 +106,67 @@
         },
         {
           "id": "F1-T4",
-          "title": "Update generator wizard to ask about dependencies",
-          "description": "Modificar lib/generator.sh para perguntar sobre dependências durante criação de tasks",
+          "title": "Validate dependencies and detect cycles",
+          "description": "Check dependency references are valid and detect circular dependencies",
           "priority": 4,
-          "passes": true,
-          "dependencies": [
-            "F1-T1"
-          ],
-          "dependencyMode": "all",
+          "passes": false,
+          "dependencies": ["F1-T3"],
           "context": {
-            "files": [
-              "lib/generator.sh"
-            ],
-            "libraries": [],
+            "files": ["saci.sh"],
+            "libraries": ["jq"],
             "hints": [
-              "Modificar generate_feature() por volta da linha 75",
-              "Após perguntar title, perguntar: 'Dependencies (comma-separated IDs, or empty)?'",
-              "Converter input 'F1-T1,F2-T2' para array JSON",
-              "Se deps não-vazio, perguntar 'Dependency mode? (all/any, default: all)'",
-              "Adicionar campos dependencies e dependencyMode no JSON da task",
-              "Usar jq -R 'split(\",\") | map(gsub(\"^\\\\s+|\\\\s+$\";\"\"))' para parse"
+              "Reuse existing check_dependencies() function for circular detection",
+              "Get all dependency IDs and verify they exist in PRP",
+              "Use get_task_dependencies() to extract dependencies per task",
+              "Validate dependencyMode is 'all' or 'any' when present",
+              "Allow missing dependencies field for backward compatibility"
             ]
           },
           "acceptance": [
-            "Wizard pergunta sobre dependencies após title",
-            "Input vazio = dependencies: []",
-            "Input com IDs é convertido para array JSON correto",
-            "Wizard pergunta modo apenas se deps não-vazio",
-            "Default para 'all' se modo não especificado",
-            "Task JSON gerado inclui campos corretos",
-            "Script passa em bash -n"
-          ],
-          "tests": {
-            "command": "bash -n lib/generator.sh && echo 'Syntax OK'"
-          }
-        },
-        {
-          "id": "F1-T5",
-          "title": "Add blocked task indicators to TUI",
-          "description": "Atualizar lib/tui.sh para mostrar ícone ⊗ em tasks bloqueadas por dependências",
-          "priority": 5,
-          "passes": true,
-          "dependencies": [
-            "F1-T1"
-          ],
-          "dependencyMode": "all",
-          "context": {
-            "files": [
-              "lib/tui.sh"
-            ],
-            "libraries": [],
-            "hints": [
-              "Modificar tui_task_list() linha ~55",
-              "Adicionar lógica para detectar se task está bloqueada",
-              "Ícones: ▶ (running), ■ (complete), □ (ready), ⊗ (blocked)",
-              "Para blocked: passes=false E dependencies não-satisfeitas",
-              "Pode precisar source saci.sh para usar check_dependencies_met()",
-              "Também atualizar show_status() linha ~247 para mostrar [depends on: ...]"
-            ]
-          },
-          "acceptance": [
-            "Tasks completas mostram ■",
-            "Task atual mostra ▶",
-            "Tasks ready mostram □",
-            "Tasks blocked mostram ⊗",
-            "Status mostra lista de dependências não-satisfeitas",
-            "Script passa em bash -n"
-          ],
-          "tests": {
-            "command": "bash -n lib/tui.sh && echo 'Syntax OK'"
-          }
-        },
-        {
-          "id": "F1-T6",
-          "title": "Implement cascade reset functionality",
-          "description": "Adicionar flag --cascade ao comando reset para resetar tasks dependentes",
-          "priority": 6,
-          "passes": true,
-          "dependencies": [
-            "F1-T2",
-            "F1-T3"
-          ],
-          "dependencyMode": "all",
-          "context": {
-            "files": [
-              "saci.sh"
-            ],
-            "libraries": [],
-            "hints": [
-              "Modificar run_reset() linha ~641",
-              "Adicionar parse de segundo argumento --cascade",
-              "Após resetar task_id, buscar todas tasks que têm task_id em dependencies",
-              "Usar jq: .features[].tasks[] | select(.dependencies // [] | index($id))",
-              "Resetar cada task dependente recursivamente",
-              "Logar claramente quantas tasks foram resetadas em cascade",
-              "Atualizar help text para documentar --cascade"
-            ]
-          },
-          "acceptance": [
-            "saci reset F1-T1 --cascade reseta F1-T1",
-            "Também reseta todas tasks que dependem de F1-T1",
-            "Reseta recursivamente (dependentes de dependentes)",
-            "Loga lista de tasks resetadas",
-            "Sem --cascade funciona como antes (backward compatible)",
-            "Help text documentado",
-            "Script passa em bash -n"
+            "Detects circular dependencies using check_dependencies()",
+            "Shows full cycle path when circular dependency found",
+            "Validates all dependency IDs reference existing tasks",
+            "Reports tasks with invalid dependency references",
+            "Checks dependencyMode is 'all' or 'any' when present",
+            "Accepts tasks without dependencies field (backward compatible)",
+            "Exits with code 1 when invalid dependencies found",
+            "Bash syntax check passes: bash -n saci.sh"
           ],
           "tests": {
             "command": "bash -n saci.sh && echo 'Syntax OK'"
           }
         },
         {
-          "id": "F1-T7",
-          "title": "Add integration tests for dependency system",
-          "description": "Criar script de teste que valida cenários principais do sistema de dependências",
-          "priority": 7,
-          "passes": true,
-          "dependencies": [
-            "F1-T2",
-            "F1-T3",
-            "F1-T4",
-            "F1-T5",
-            "F1-T6"
-          ],
-          "dependencyMode": "all",
+          "id": "F1-T5",
+          "title": "Display validation summary and suggestions",
+          "description": "Show formatted summary of validation results with suggestions for improvements",
+          "priority": 5,
+          "passes": false,
+          "dependencies": ["F1-T4"],
           "context": {
-            "files": [
-              "tests/test-dependencies.sh"
-            ],
+            "files": ["saci.sh"],
             "libraries": [],
             "hints": [
-              "Criar diretório tests/ se não existir",
-              "Testar: linear dependency (A->B->C)",
-              "Testar: circular dependency detection",
-              "Testar: mode 'any' com uma dep completa",
-              "Testar: cross-feature dependency",
-              "Testar: missing dependency ID",
-              "Testar: cascade reset",
-              "Usar prp.json temporário para cada teste",
-              "Source saci.sh para testar funções diretamente"
+              "Use consistent format: [✓] or [✗] prefix for each check",
+              "Count total features, tasks, and dependencies",
+              "Show warnings (yellow) for non-critical issues",
+              "Display suggestions for detected problems",
+              "Final message: '✓ PRP is valid and ready to use' when all pass",
+              "Use existing color scheme matching other commands"
             ]
           },
           "acceptance": [
-            "Teste linear dependency passa",
-            "Teste circular dependency passa (detecta erro)",
-            "Teste mode 'any' passa",
-            "Teste cross-feature passa",
-            "Teste missing dependency passa (detecta erro)",
-            "Teste cascade reset passa",
-            "Todos testes têm assert claro",
-            "Script executável e retorna exit code correto"
+            "Shows green checkmarks [✓] for passed validations",
+            "Shows red X [✗] for failed validations",
+            "Displays count of features, tasks, and total dependencies",
+            "Shows yellow warnings for non-critical issues",
+            "Provides actionable suggestions for fixing errors",
+            "Outputs success message when all validations pass",
+            "Returns appropriate exit code (0 success, 1 failure)",
+            "Bash syntax check passes: bash -n saci.sh"
           ],
           "tests": {
-            "command": "bash -n tests/test-dependencies.sh && echo 'Syntax OK'"
-          }
-        },
-        {
-          "id": "F1-T8",
-          "title": "Update documentation for dependency system",
-          "description": "Atualizar README.md com documentação completa do sistema de dependências",
-          "priority": 8,
-          "passes": true,
-          "dependencies": [
-            "F1-T7"
-          ],
-          "dependencyMode": "all",
-          "context": {
-            "files": [
-              "README.md"
-            ],
-            "libraries": [],
-            "hints": [
-              "Adicionar seção 'Task Dependencies' após 'PRP Format' (linha ~130)",
-              "Documentar campos dependencies e dependencyMode",
-              "Exemplos de uso: linear, parallel, cross-feature",
-              "Documentar modes 'all' e 'any'",
-              "Documentar saci reset --cascade",
-              "Atualizar seção Debug com comandos dependency-related",
-              "Adicionar exemplos de prp.json com dependencies"
-            ]
-          },
-          "acceptance": [
-            "Seção Task Dependencies adicionada",
-            "Campos dependencies e dependencyMode documentados",
-            "Pelo menos 3 exemplos de uso",
-            "Comando reset --cascade documentado",
-            "Seção Debug atualizada",
-            "Exemplos de prp.json válidos",
-            "Markdown válido (sem erros de syntax)"
-          ],
-          "tests": {
-            "command": "echo 'Manual verification required'"
+            "command": "bash -n saci.sh && echo 'Syntax OK'"
           }
         }
       ]
