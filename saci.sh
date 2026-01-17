@@ -677,13 +677,13 @@ LAST_APPROACH=""
 # ============================================================================
 
 # Extract tokens and cost from CLI output (JSON format)
-# Returns: input_tokens,output_tokens,total_tokens,model,cost_usd
+# Returns: input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,total_tokens,model,cost_usd
 extract_tokens_from_output() {
     local output_file="$1"
 
     # Check if file exists and is not empty
     if [ ! -f "$output_file" ] || [ ! -s "$output_file" ]; then
-        echo "0,0,0,unknown,0.000000"
+        echo "0,0,0,0,0,unknown,0.000000"
         return
     fi
 
@@ -691,15 +691,19 @@ extract_tokens_from_output() {
     # Find the result object (object with type:"result")
     local input_tokens=$(jq -r '.[] | select(.type == "result") | .usage.input_tokens // 0' "$output_file" 2>/dev/null || echo "0")
     local output_tokens=$(jq -r '.[] | select(.type == "result") | .usage.output_tokens // 0' "$output_file" 2>/dev/null || echo "0")
-    local total_tokens=$((input_tokens + output_tokens))
+    local cache_read=$(jq -r '.[] | select(.type == "result") | .usage.cache_read_input_tokens // 0' "$output_file" 2>/dev/null || echo "0")
+    local cache_creation=$(jq -r '.[] | select(.type == "result") | .usage.cache_creation_input_tokens // 0' "$output_file" 2>/dev/null || echo "0")
+
+    # Total = new input + cache reads + output (cache creation is counted in input)
+    local total_tokens=$((input_tokens + cache_read + output_tokens))
 
     # Extract model from modelUsage (first model key)
     local model=$(jq -r '.[] | select(.type == "result") | .modelUsage | keys[0] // "unknown"' "$output_file" 2>/dev/null || echo "unknown")
 
-    # Extract cost (Claude CLI calculates this for us)
+    # Extract cost (Claude CLI calculates this for us, includes cache costs)
     local cost_usd=$(jq -r '.[] | select(.type == "result") | .total_cost_usd // 0' "$output_file" 2>/dev/null || echo "0")
 
-    echo "$input_tokens,$output_tokens,$total_tokens,$model,$cost_usd"
+    echo "$input_tokens,$output_tokens,$cache_read,$cache_creation,$total_tokens,$model,$cost_usd"
 }
 
 # Calculate cost in USD based on Claude pricing (as of 2026-01-16)
@@ -744,21 +748,23 @@ log_metrics() {
     local iteration="$2"
     local input_tokens="$3"
     local output_tokens="$4"
-    local total_tokens="$5"
-    local model="$6"
-    local result="$7"           # "success" or "failed"
-    local duration_ms="$8"
-    local error_type="${9:-}"   # ENVIRONMENT, CODE, TIMEOUT, UNKNOWN, or empty
+    local cache_read="$5"
+    local cache_creation="$6"
+    local total_tokens="$7"
+    local model="$8"
+    local result="$9"           # "success" or "failed"
+    local duration_ms="${10}"
+    local error_type="${11:-}"  # ENVIRONMENT, CODE, TIMEOUT, UNKNOWN, or empty
+    local cost_usd="${12}"      # Cost from CLI (already calculated)
 
     local timestamp=$(date -Iseconds)
-    local cost_usd=$(calculate_cost "$model" "$input_tokens" "$output_tokens")
 
     # Ensure .saci directory exists
     mkdir -p .saci
 
     # Append to metrics.jsonl (one line per iteration)
     cat >> .saci/metrics.jsonl <<EOF
-{"timestamp":"$timestamp","task_id":"$task_id","iteration":$iteration,"input_tokens":$input_tokens,"output_tokens":$output_tokens,"total_tokens":$total_tokens,"model":"$model","result":"$result","duration_ms":$duration_ms,"error_type":"$error_type","cost_usd":$cost_usd}
+{"timestamp":"$timestamp","task_id":"$task_id","iteration":$iteration,"input_tokens":$input_tokens,"output_tokens":$output_tokens,"cache_read_tokens":$cache_read,"cache_creation_tokens":$cache_creation,"total_tokens":$total_tokens,"model":"$model","result":"$result","duration_ms":$duration_ms,"error_type":"$error_type","cost_usd":$cost_usd}
 EOF
 }
 
@@ -839,17 +845,21 @@ run_single_iteration() {
         local end_time=$(($(date +%s) * 1000))
         local duration_ms=$((end_time - start_time))
 
-        # Parse tokens and cost from CLI output
-        IFS=',' read -r input_tokens output_tokens total_tokens model cost_usd <<< "$(extract_tokens_from_output "$cli_output_file")"
+        # Parse tokens and cost from CLI output (includes cache tokens)
+        IFS=',' read -r input_tokens output_tokens cache_read cache_creation total_tokens model cost_usd <<< "$(extract_tokens_from_output "$cli_output_file")"
 
         # Fallback to calculate_cost if cost not available from CLI
         if [ "$cost_usd" = "0" ] || [ "$cost_usd" = "0.000000" ]; then
             cost_usd=$(calculate_cost "$model" "$input_tokens" "$output_tokens")
         fi
 
-        # Log token info
+        # Log token info with cache breakdown
         if [ "$total_tokens" != "0" ]; then
-            log_info "Tokens: $total_tokens ($input_tokens in, $output_tokens out) - \$$cost_usd USD"
+            if [ "$cache_read" != "0" ] || [ "$cache_creation" != "0" ]; then
+                log_info "Tokens: $total_tokens ($input_tokens new, $cache_read cached, $output_tokens out) - \$$cost_usd USD"
+            else
+                log_info "Tokens: $total_tokens ($input_tokens in, $output_tokens out) - \$$cost_usd USD"
+            fi
         fi
 
         # ================================================================
@@ -875,7 +885,7 @@ run_single_iteration() {
 
             # Log metrics for failed iteration (CODE error - didn't implement)
             log_metrics "$task_id" "$iteration" "$input_tokens" "$output_tokens" \
-                "$total_tokens" "$model" "failed" "$duration_ms" "CODE"
+                "$cache_read" "$cache_creation" "$total_tokens" "$model" "failed" "$duration_ms" "CODE" "$cost_usd"
 
             rm -f "$cli_output_file"
             return 1
@@ -893,7 +903,7 @@ run_single_iteration() {
 
             # Log metrics for successful iteration
             log_metrics "$task_id" "$iteration" "$input_tokens" "$output_tokens" \
-                "$total_tokens" "$model" "success" "$duration_ms" ""
+                "$cache_read" "$cache_creation" "$total_tokens" "$model" "success" "$duration_ms" "" "$cost_usd"
 
             # Commit changes
             git add -A 2>/dev/null || true
@@ -935,7 +945,7 @@ EOF
 
             # Log metrics for failed iteration
             log_metrics "$task_id" "$iteration" "$input_tokens" "$output_tokens" \
-                "$total_tokens" "$model" "failed" "$duration_ms" "CODE"
+                "$cache_read" "$cache_creation" "$total_tokens" "$model" "failed" "$duration_ms" "CODE" "$cost_usd"
 
             # Store error for next iteration
             LAST_ERROR="$test_output"
@@ -972,7 +982,7 @@ $test_output
         local duration_ms=$((end_time - start_time))
 
         # Try to extract tokens and cost (may be partial or unavailable)
-        IFS=',' read -r input_tokens output_tokens total_tokens model cost_usd <<< "$(extract_tokens_from_output "$cli_output_file")"
+        IFS=',' read -r input_tokens output_tokens cache_read cache_creation total_tokens model cost_usd <<< "$(extract_tokens_from_output "$cli_output_file")"
 
         # Fallback to calculate_cost if cost not available from CLI
         if [ "$cost_usd" = "0" ] || [ "$cost_usd" = "0.000000" ]; then
@@ -995,7 +1005,7 @@ $test_output
 
             # Log metrics for failed session (ENVIRONMENT error type since it's likely API/network)
             log_metrics "$task_id" "$iteration" "$input_tokens" "$output_tokens" \
-                "$total_tokens" "$model" "failed" "$duration_ms" "ENVIRONMENT"
+                "$cache_read" "$cache_creation" "$total_tokens" "$model" "failed" "$duration_ms" "ENVIRONMENT" "$cost_usd"
 
             log_progress "$task_id" "⚠️ SESSION FAILED (CHANGES PRESERVED)" "
 **Iteration:** $iteration
@@ -1015,7 +1025,7 @@ $test_output
 
             # Log metrics for failed session
             log_metrics "$task_id" "$iteration" "$input_tokens" "$output_tokens" \
-                "$total_tokens" "$model" "failed" "$duration_ms" "ENVIRONMENT"
+                "$cache_read" "$cache_creation" "$total_tokens" "$model" "failed" "$duration_ms" "ENVIRONMENT" "$cost_usd"
 
             log_progress "$task_id" "❌ SESSION FAILED (ROLLED BACK)" "
 **Iteration:** $iteration
