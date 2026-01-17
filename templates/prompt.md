@@ -6,7 +6,14 @@ You are an autonomous coding agent working on a software project.
 
 1. Read the PRP at `prp.json` (task list with features and tasks)
 2. Read the progress log at `progress.txt` (check Codebase Patterns section first)
-3. Check you're on the correct branch from PRP `project.branchName`. If not, check it out or create from main.
+3. **Branch Management:**
+   - First, check if ALL tasks in prp.json have `passes: true`
+   - If ALL complete: Stay on current branch (work is done, no need to switch)
+   - If NOT complete:
+     - Check if branch `project.branchName` exists: `git branch --list <branchName>`
+     - If exists: Check it out
+     - If doesn't exist: Create from current branch OR stay on current (your choice)
+     - If branch seems deleted/merged but tasks incomplete: Stay on current branch and warn
 4. Pick the **highest priority** task where `passes: false`
 5. Implement that single task
 6. Run quality checks (typecheck, lint, test - use whatever your project requires)

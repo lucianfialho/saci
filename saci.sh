@@ -306,6 +306,21 @@ get_blocked_dependencies() {
 }
 
 # ============================================================================
+# PRP Completion Check
+# ============================================================================
+
+check_prp_complete() {
+    local total_tasks=$(jq '[.features[].tasks[]] | length' "$PRP_FILE")
+    local completed_tasks=$(jq '[.features[].tasks[] | select(.passes == true)] | length' "$PRP_FILE")
+
+    if [ "$completed_tasks" -eq "$total_tasks" ] && [ "$total_tasks" -gt 0 ]; then
+        return 0  # Complete
+    else
+        return 1  # Not complete
+    fi
+}
+
+# ============================================================================
 # Circular Dependency Detection
 # ============================================================================
 
@@ -847,6 +862,12 @@ EOF
             # Mark task complete
             mark_task_complete "$task_id"
 
+            # Check if all tasks are now complete
+            if check_prp_complete; then
+                log_success "🎉 All tasks in PRP complete!"
+                log_info "Create new PRP for next feature or reset this one"
+            fi
+
             # Clear error state
             LAST_ERROR=""
             LAST_APPROACH=""
@@ -1081,7 +1102,19 @@ EOF
     log_info "Remaining: $remaining"
     log_info "Max iterations per task: $MAX_ITERATIONS"
     echo ""
-    
+
+    # Check if all tasks are already complete
+    if check_prp_complete; then
+        log_success "🎉 All tasks complete!"
+        echo ""
+        echo "Next steps:"
+        echo "  • Create new PRP: claude /prp  OR  saci init"
+        echo "  • Reset tasks: saci reset"
+        echo "  • Review: cat progress.txt"
+        echo ""
+        exit 0
+    fi
+
     # Main loop - process each task
     local task_id
     local completed=0
