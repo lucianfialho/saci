@@ -1398,59 +1398,155 @@ run_validate() {
     fi
 
     log_info "Validating PRP file: $prp_file"
+    echo ""
 
-    # Validate JSON syntax and extract line number from parse errors
+    # Track validation results
+    local validation_errors=0
+    local validation_warnings=0
+    local suggestions=()
+
+    # ========================================================================
+    # 1. Validate JSON syntax
+    # ========================================================================
     local jq_error
     if ! jq_error=$(jq empty "$prp_file" 2>&1); then
-        log_error "Invalid JSON syntax in $prp_file"
+        echo -e "${RED}[✗]${NC} JSON syntax validation"
         # Extract line number from jq error (format: "parse error: ... at line X, column Y")
         local line_num=$(echo "$jq_error" | grep -oE 'line [0-9]+' | grep -oE '[0-9]+' | head -1)
         if [ -n "$line_num" ]; then
-            echo -e "${RED}Error at line $line_num${NC}"
+            echo -e "    ${RED}Error at line $line_num${NC}"
         fi
-        echo "$jq_error"
+        echo "    $jq_error"
+        suggestions+=("Fix JSON syntax errors before proceeding")
+        validation_errors=$((validation_errors + 1))
+        echo ""
+        # Early exit - can't continue without valid JSON
+        display_validation_summary "$prp_file" "$validation_errors" "$validation_warnings" "${suggestions[@]}"
         return 1
+    else
+        echo -e "${GREEN}[✓]${NC} JSON syntax validation"
     fi
 
-    # Validate required top-level field: 'project'
+    # ========================================================================
+    # 2. Validate required top-level fields
+    # ========================================================================
     if ! jq -e '.project' "$prp_file" >/dev/null 2>&1; then
-        log_error "Missing required field: 'project'"
-        return 1
+        echo -e "${RED}[✗]${NC} Required field 'project'"
+        suggestions+=("Add 'project' field with project name")
+        validation_errors=$((validation_errors + 1))
+    else
+        echo -e "${GREEN}[✓]${NC} Required field 'project'"
     fi
 
-    # Validate required top-level field: 'features'
     if ! jq -e '.features' "$prp_file" >/dev/null 2>&1; then
-        log_error "Missing required field: 'features'"
-        return 1
+        echo -e "${RED}[✗]${NC} Required field 'features'"
+        suggestions+=("Add 'features' array with at least one feature")
+        validation_errors=$((validation_errors + 1))
+    else
+        # Verify 'features' is an array
+        if ! jq -e '.features | type == "array"' "$prp_file" >/dev/null 2>&1; then
+            echo -e "${RED}[✗]${NC} Field 'features' must be an array"
+            suggestions+=("Change 'features' to be an array of feature objects")
+            validation_errors=$((validation_errors + 1))
+        else
+            # Verify features array is not empty
+            local features_count=$(jq '.features | length' "$prp_file")
+            if [ "$features_count" -eq 0 ]; then
+                echo -e "${RED}[✗]${NC} Field 'features' array cannot be empty"
+                suggestions+=("Add at least one feature to the 'features' array")
+                validation_errors=$((validation_errors + 1))
+            else
+                echo -e "${GREEN}[✓]${NC} Features array structure"
+            fi
+        fi
     fi
 
-    # Verify 'features' is an array
-    if ! jq -e '.features | type == "array"' "$prp_file" >/dev/null 2>&1; then
-        log_error "Field 'features' must be an array"
-        return 1
-    fi
-
-    # Verify features array is not empty
-    local features_count=$(jq '.features | length' "$prp_file")
-    if [ "$features_count" -eq 0 ]; then
-        log_error "Field 'features' array cannot be empty"
-        return 1
-    fi
-
-    # Validate task structure and uniqueness
+    # ========================================================================
+    # 3. Validate task structure and uniqueness
+    # ========================================================================
     if ! validate_task_structure "$prp_file"; then
-        log_error "Task structure validation failed"
-        return 1
+        echo -e "${RED}[✗]${NC} Task structure and uniqueness"
+        suggestions+=("Fix task structure issues (see errors above)")
+        validation_errors=$((validation_errors + 1))
+    else
+        echo -e "${GREEN}[✓]${NC} Task structure and uniqueness"
     fi
 
-    # Validate dependencies (detect circular dependencies)
+    # ========================================================================
+    # 4. Validate dependencies
+    # ========================================================================
     if ! validate_dependencies "$prp_file"; then
-        log_error "Dependency validation failed"
+        echo -e "${RED}[✗]${NC} Task dependencies"
+        suggestions+=("Fix dependency issues (see errors above)")
+        validation_errors=$((validation_errors + 1))
+    else
+        echo -e "${GREEN}[✓]${NC} Task dependencies"
+    fi
+
+    echo ""
+
+    # ========================================================================
+    # Display validation summary
+    # ========================================================================
+    display_validation_summary "$prp_file" "$validation_errors" "$validation_warnings" "${suggestions[@]}"
+
+    if [ "$validation_errors" -gt 0 ]; then
         return 1
     fi
 
-    log_success "PRP file is valid"
     return 0
+}
+
+display_validation_summary() {
+    local prp_file="$1"
+    local errors="$2"
+    local warnings="$3"
+    shift 3
+    local suggestions=("$@")
+
+    # Count statistics
+    local features_count=$(jq '.features | length' "$prp_file" 2>/dev/null || echo "0")
+    local tasks_count=$(jq '[.features[].tasks[]] | length' "$prp_file" 2>/dev/null || echo "0")
+    local total_deps=$(jq '[.features[].tasks[].dependencies // [] | length] | add // 0' "$prp_file" 2>/dev/null || echo "0")
+
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  Validation Summary${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Statistics:"
+    echo "  • Features: $features_count"
+    echo "  • Tasks: $tasks_count"
+    echo "  • Total dependencies: $total_deps"
+    echo ""
+
+    if [ "$errors" -gt 0 ]; then
+        echo -e "${RED}Errors: $errors${NC}"
+    fi
+
+    if [ "$warnings" -gt 0 ]; then
+        echo -e "${YELLOW}Warnings: $warnings${NC}"
+    fi
+
+    # Display suggestions if any
+    if [ ${#suggestions[@]} -gt 0 ]; then
+        echo ""
+        echo "Suggestions:"
+        for suggestion in "${suggestions[@]}"; do
+            [ -z "$suggestion" ] && continue
+            echo -e "  ${YELLOW}→${NC} $suggestion"
+        done
+    fi
+
+    echo ""
+
+    if [ "$errors" -eq 0 ]; then
+        echo -e "${GREEN}✓ PRP is valid and ready to use${NC}"
+        echo ""
+    else
+        echo -e "${RED}✗ PRP validation failed - please fix the errors above${NC}"
+        echo ""
+        exit 1
+    fi
 }
 
 show_help() {
