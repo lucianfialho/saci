@@ -1280,9 +1280,41 @@ run_validate() {
 
     log_info "Validating PRP file: $prp_file"
 
-    # Validate JSON syntax
-    if ! jq empty "$prp_file" 2>/dev/null; then
+    # Validate JSON syntax and extract line number from parse errors
+    local jq_error
+    if ! jq_error=$(jq empty "$prp_file" 2>&1); then
         log_error "Invalid JSON syntax in $prp_file"
+        # Extract line number from jq error (format: "parse error: ... at line X, column Y")
+        local line_num=$(echo "$jq_error" | grep -oE 'line [0-9]+' | grep -oE '[0-9]+' | head -1)
+        if [ -n "$line_num" ]; then
+            echo -e "${RED}Error at line $line_num${NC}"
+        fi
+        echo "$jq_error"
+        return 1
+    fi
+
+    # Validate required top-level field: 'project'
+    if ! jq -e '.project' "$prp_file" >/dev/null 2>&1; then
+        log_error "Missing required field: 'project'"
+        return 1
+    fi
+
+    # Validate required top-level field: 'features'
+    if ! jq -e '.features' "$prp_file" >/dev/null 2>&1; then
+        log_error "Missing required field: 'features'"
+        return 1
+    fi
+
+    # Verify 'features' is an array
+    if ! jq -e '.features | type == "array"' "$prp_file" >/dev/null 2>&1; then
+        log_error "Field 'features' must be an array"
+        return 1
+    fi
+
+    # Verify features array is not empty
+    local features_count=$(jq '.features | length' "$prp_file")
+    if [ "$features_count" -eq 0 ]; then
+        log_error "Field 'features' array cannot be empty"
         return 1
     fi
 
