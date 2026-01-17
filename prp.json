@@ -16,9 +16,11 @@
           "title": "Add validate command structure",
           "description": "Add 'validate' command case to saci.sh with basic structure and help text",
           "priority": 1,
-          "passes": false,
+          "passes": true,
           "context": {
-            "files": ["saci.sh"],
+            "files": [
+              "saci.sh"
+            ],
             "libraries": [],
             "hints": [
               "Add case after 'status)' command (around line 1333)",
@@ -46,10 +48,16 @@
           "description": "Implement validation for JSON syntax and required top-level fields",
           "priority": 2,
           "passes": false,
-          "dependencies": ["F1-T1"],
+          "dependencies": [
+            "F1-T1"
+          ],
           "context": {
-            "files": ["saci.sh"],
-            "libraries": ["jq"],
+            "files": [
+              "saci.sh"
+            ],
+            "libraries": [
+              "jq"
+            ],
             "hints": [
               "Use jq to validate JSON syntax: jq empty file.json 2>&1",
               "Check for required fields: .project, .features",
@@ -77,10 +85,16 @@
           "description": "Check all tasks have required fields, unique IDs, and correct formats",
           "priority": 3,
           "passes": false,
-          "dependencies": ["F1-T2"],
+          "dependencies": [
+            "F1-T2"
+          ],
           "context": {
-            "files": ["saci.sh"],
-            "libraries": ["jq"],
+            "files": [
+              "saci.sh"
+            ],
+            "libraries": [
+              "jq"
+            ],
             "hints": [
               "Required task fields: id, title, description, priority, passes, context, acceptance, tests",
               "Use jq to check field existence: has(\"fieldname\")",
@@ -110,10 +124,16 @@
           "description": "Check dependency references are valid and detect circular dependencies",
           "priority": 4,
           "passes": false,
-          "dependencies": ["F1-T3"],
+          "dependencies": [
+            "F1-T3"
+          ],
           "context": {
-            "files": ["saci.sh"],
-            "libraries": ["jq"],
+            "files": [
+              "saci.sh"
+            ],
+            "libraries": [
+              "jq"
+            ],
             "hints": [
               "Reuse existing check_dependencies() function for circular detection",
               "Get all dependency IDs and verify they exist in PRP",
@@ -142,9 +162,13 @@
           "description": "Show formatted summary of validation results with suggestions for improvements",
           "priority": 5,
           "passes": false,
-          "dependencies": ["F1-T4"],
+          "dependencies": [
+            "F1-T4"
+          ],
           "context": {
-            "files": ["saci.sh"],
+            "files": [
+              "saci.sh"
+            ],
             "libraries": [],
             "hints": [
               "Use consistent format: [✓] or [✗] prefix for each check",
