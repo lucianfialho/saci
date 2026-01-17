@@ -1381,8 +1381,8 @@ validate_task_structure() {
         fi
 
         # Validate passes is boolean
-        local passes=$(echo "$task_json" | jq -r '.passes // "null"')
-        if [ "$passes" != "true" ] && [ "$passes" != "false" ]; then
+        local passes=$(echo "$task_json" | jq -r 'if has("passes") then (.passes | type) else "missing" end')
+        if [ "$passes" != "boolean" ]; then
             log_error "Task $task_id: Field 'passes' must be boolean (true or false)"
             has_errors=1
         fi
