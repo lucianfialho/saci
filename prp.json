@@ -84,7 +84,7 @@
           "title": "Validate task structure and uniqueness",
           "description": "Check all tasks have required fields, unique IDs, and correct formats",
           "priority": 3,
-          "passes": false,
+          "passes": true,
           "dependencies": [
             "F1-T2"
           ],

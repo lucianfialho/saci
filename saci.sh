@@ -376,6 +376,10 @@ validate_dependencies() {
 
     log_info "Validating task dependencies..."
 
+    # Get all task IDs for existence checking
+    local all_task_ids=$(jq -r '.features[].tasks[].id' "$prp_file")
+    local has_errors=0
+
     # Get all tasks with dependencies
     local tasks_with_deps=$(jq -r '
         .features[].tasks[] |
@@ -389,19 +393,53 @@ validate_dependencies() {
         return 0
     fi
 
-    # Check each task for circular dependencies
+    # Validate each task with dependencies
     while IFS= read -r task_id; do
         [ -z "$task_id" ] && continue
 
+        # Get dependencies for this task
+        local dependencies=$(jq -r --arg id "$task_id" '
+            .features[].tasks[] | select(.id == $id) |
+            .dependencies // [] | .[]
+        ' "$prp_file")
+
+        # Validate dependency IDs reference existing tasks
+        while IFS= read -r dep_id; do
+            [ -z "$dep_id" ] && continue
+
+            # Check if dependency exists
+            if ! echo "$all_task_ids" | grep -qx "$dep_id"; then
+                log_error "Task $task_id: Invalid dependency reference '$dep_id' (task does not exist)"
+                has_errors=1
+            fi
+        done <<< "$dependencies"
+
+        # Validate dependencyMode if present
+        local dep_mode=$(jq -r --arg id "$task_id" '
+            .features[].tasks[] | select(.id == $id) |
+            .dependencyMode // "null"
+        ' "$prp_file")
+
+        if [ "$dep_mode" != "null" ] && [ "$dep_mode" != "all" ] && [ "$dep_mode" != "any" ]; then
+            log_error "Task $task_id: Invalid dependencyMode '$dep_mode' (must be 'all' or 'any')"
+            has_errors=1
+        fi
+
+        # Check for circular dependencies
         local cycle_path
         if ! cycle_path=$(detect_circular_dependency "$task_id" "" ""); then
             log_error "Circular dependency detected!"
             log_error "Cycle path: $cycle_path"
-            return 1
+            has_errors=1
         fi
     done <<< "$tasks_with_deps"
 
-    log_success "No circular dependencies found"
+    # Return with error if any validation failed
+    if [ $has_errors -eq 1 ]; then
+        return 1
+    fi
+
+    log_success "All task dependencies are valid"
     return 0
 }
 
