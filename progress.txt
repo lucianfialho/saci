@@ -242,3 +242,41 @@ For more information:
 **Result:** All tests passed
 **Commit:** feat: Validate task structure and uniqueness [task-F1-T3]
 
+
+## [2026-01-17 10:05:00] Task F1-T4 - ✅ COMPLETED
+
+**Iteration:** 1
+**Result:** All tests passed
+**Commit:** feat: Validate dependencies and detect cycles [task-F1-T4]
+
+Enhanced validate_dependencies() function to perform comprehensive dependency validation:
+
+- Validates all dependency IDs reference existing tasks in the PRP
+- Checks dependencyMode is 'all' or 'any' when present
+- Detects circular dependencies using existing detect_circular_dependency() function
+- Shows full cycle path when circular dependency found
+- Backward compatible with tasks missing dependencies field
+- Returns exit code 1 when validation errors detected
+
+Implementation details:
+- Reused existing get_task_dependencies() for extracting dependency IDs (line 401-404)
+- Collected all task IDs first for existence validation (line 380)
+- Validated each dependency ID exists in task list (line 406-415)
+- Validated dependencyMode when present using jq fallback `// "null"` (line 418-426)
+- Checked for circular dependencies using detect_circular_dependency() (line 429-434)
+- Collected all errors before returning (no fail-fast behavior)
+- Returns 1 if any validation errors found (line 438-440)
+
+Files changed:
+- saci.sh:374-444 - Enhanced validate_dependencies() function
+
+**Learnings for future iterations:**
+- The validate_dependencies() function now performs 3 types of validation:
+  1. Dependency existence checking (invalid references)
+  2. DependencyMode value validation ('all' or 'any')
+  3. Circular dependency detection (cycles in DAG)
+- Using `// "null"` for jq fallback allows distinguishing between missing field and actual values
+- Collecting all errors (has_errors flag) improves user experience - shows all issues at once
+- The function is backward compatible - tasks without dependencies field pass validation
+- This completes the core validation system - PRPs are now validated on startup
+- Combined with F1-T2 and F1-T3, the validation system now checks: JSON syntax, structure, task fields, and dependencies
