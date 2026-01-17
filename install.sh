@@ -39,8 +39,7 @@ mkdir -p "$SACI_LIB_DIR/templates"
 
 # Copy core files
 cp lib/*.sh "$SACI_LIB_DIR/lib/"
-cp templates/*.md "$SACI_LIB_DIR/templates/" 2>/dev/null || true
-cp templates/*.json "$SACI_LIB_DIR/templates/" 2>/dev/null || true
+cp -r templates/* "$SACI_LIB_DIR/templates/" 2>/dev/null || true
 
 # Copy main script
 cp saci.sh "$SACI_LIB_DIR/saci"
@@ -156,6 +155,8 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo ""
 echo "Installed components:"
 echo "  ✓ Saci core (saci.sh, lib, templates)"
+echo "  ✓ PRP templates (5-layer Context Engineering prompts)"
+echo "    • base.md + 5 domains + 3 task-types"
 echo "  ✓ 4 intelligent hooks (PreToolUse, PostToolUse, Stop, UserPromptSubmit)"
 echo "  ✓ Debug mode framework (environment-fixer subagent)"
 echo "  ✓ Claude Code knowledge base (11 docs)"
@@ -165,6 +166,10 @@ echo "Usage:"
 echo "  saci scan      # Detect stack"
 echo "  saci init      # Create PRP"
 echo "  saci jump      # Execute autonomous loop"
+echo ""
+echo "Documentation:"
+echo "  ~/.claude/docs/saci-analysis.md - Complete system analysis"
+echo "  ~/.local/share/saci/.saci/README.md - Hooks overview"
 echo ""
 echo "Test hooks:"
 echo "  ~/.local/share/saci/.saci/test-hooks.sh"
