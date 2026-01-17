@@ -1270,6 +1270,87 @@ run_reset() {
     fi
 }
 
+validate_task_structure() {
+    local prp_file="$1"
+    local has_errors=0
+
+    log_info "Validating task structure and uniqueness..."
+
+    # Required task fields
+    local required_fields=("id" "title" "description" "priority" "passes" "context" "acceptance" "tests")
+
+    # Collect all task IDs to check for duplicates
+    local all_task_ids=$(jq -r '.features[].tasks[].id' "$prp_file" 2>/dev/null)
+    local duplicate_ids=$(echo "$all_task_ids" | sort | uniq -d)
+
+    if [ -n "$duplicate_ids" ]; then
+        log_error "Duplicate task IDs found:"
+        while IFS= read -r dup_id; do
+            [ -z "$dup_id" ] && continue
+            echo -e "  ${RED}✗${NC} Duplicate ID: $dup_id"
+            has_errors=1
+        done <<< "$duplicate_ids"
+    fi
+
+    # Validate each task's required fields
+    local task_count=0
+    while IFS= read -r task_id; do
+        [ -z "$task_id" ] && continue
+        task_count=$((task_count + 1))
+
+        # Validate ID format (F[num]-T[num])
+        if ! echo "$task_id" | grep -qE '^F[0-9]+-T[0-9]+$'; then
+            log_error "Task $task_id: Invalid ID format (must match F[num]-T[num])"
+            has_errors=1
+        fi
+
+        # Get task data as JSON object for validation
+        local task_json=$(jq --arg id "$task_id" '[.features[].tasks[] | select(.id == $id)] | .[0]' "$prp_file")
+
+        # Check each required field
+        for field in "${required_fields[@]}"; do
+            if ! echo "$task_json" | jq -e "has(\"$field\")" >/dev/null 2>&1; then
+                log_error "Task $task_id: Missing required field '$field'"
+                has_errors=1
+            fi
+        done
+
+        # Validate priority is a number
+        local priority=$(echo "$task_json" | jq -r '.priority // "null"')
+        if [ "$priority" = "null" ] || ! echo "$priority" | grep -qE '^[0-9]+$'; then
+            log_error "Task $task_id: Field 'priority' must be a number"
+            has_errors=1
+        fi
+
+        # Validate passes is boolean
+        local passes=$(echo "$task_json" | jq -r '.passes // "null"')
+        if [ "$passes" != "true" ] && [ "$passes" != "false" ]; then
+            log_error "Task $task_id: Field 'passes' must be boolean (true or false)"
+            has_errors=1
+        fi
+
+        # Validate acceptance is non-empty array
+        local acceptance_count=$(echo "$task_json" | jq '.acceptance | length' 2>/dev/null || echo "0")
+        if [ "$acceptance_count" -eq 0 ]; then
+            log_error "Task $task_id: Field 'acceptance' must be non-empty array"
+            has_errors=1
+        fi
+
+        # Validate tests.command field exists
+        if ! echo "$task_json" | jq -e '.tests.command' >/dev/null 2>&1; then
+            log_error "Task $task_id: Missing required field 'tests.command'"
+            has_errors=1
+        fi
+    done <<< "$all_task_ids"
+
+    if [ $has_errors -eq 0 ]; then
+        log_success "All $task_count tasks have valid structure"
+        return 0
+    else
+        return 1
+    fi
+}
+
 run_validate() {
     local prp_file="${1:-$PRP_FILE}"
 
@@ -1315,6 +1396,12 @@ run_validate() {
     local features_count=$(jq '.features | length' "$prp_file")
     if [ "$features_count" -eq 0 ]; then
         log_error "Field 'features' array cannot be empty"
+        return 1
+    fi
+
+    # Validate task structure and uniqueness
+    if ! validate_task_structure "$prp_file"; then
+        log_error "Task structure validation failed"
         return 1
     fi
 
