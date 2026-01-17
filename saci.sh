@@ -730,7 +730,8 @@ run_single_iteration() {
     local test_cmd=$(get_test_command "$task_id")
 
     # Start time tracking
-    local start_time=$(date +%s%3N)  # Milliseconds
+    # Milliseconds timestamp (macOS compatible)
+    local start_time=$(($(date +%s) * 1000))
 
     log_iteration "Running iteration $iteration for task $task_id: $title"
     
@@ -795,7 +796,7 @@ run_single_iteration() {
         # ================================================================
         # EXTRACT TOKENS FROM OUTPUT
         # ================================================================
-        local end_time=$(date +%s%3N)
+        local end_time=$(($(date +%s) * 1000))
         local duration_ms=$((end_time - start_time))
 
         # Parse tokens from CLI output
@@ -923,7 +924,7 @@ $test_output
         log_error "$CLI_PROVIDER session failed"
 
         # Calculate duration even on failure
-        local end_time=$(date +%s%3N)
+        local end_time=$(($(date +%s) * 1000))
         local duration_ms=$((end_time - start_time))
 
         # Try to extract tokens (may be partial or unavailable)
@@ -1269,6 +1270,32 @@ run_reset() {
     fi
 }
 
+run_validate() {
+    local prp_file="${1:-$PRP_FILE}"
+
+    if [ ! -f "$prp_file" ]; then
+        log_error "PRP file not found: $prp_file"
+        return 1
+    fi
+
+    log_info "Validating PRP file: $prp_file"
+
+    # Validate JSON syntax
+    if ! jq empty "$prp_file" 2>/dev/null; then
+        log_error "Invalid JSON syntax in $prp_file"
+        return 1
+    fi
+
+    # Validate dependencies (detect circular dependencies)
+    if ! validate_dependencies "$prp_file"; then
+        log_error "Dependency validation failed"
+        return 1
+    fi
+
+    log_success "PRP file is valid"
+    return 0
+}
+
 show_help() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1284,6 +1311,7 @@ show_help() {
     echo "  reset [task-id]          Reset all tasks (or specific task) to passes: false"
     echo "  reset <task-id> --cascade Reset task and all dependent tasks recursively"
     echo "  status                   Show task progress with nice TUI (requires gum)"
+    echo "  validate [file]          Validate PRP file structure and dependencies (default: prp.json)"
     echo "  jump                     Execute the Ralph loop (default)"
     echo ""
     echo "Jump Options:"
@@ -1299,6 +1327,8 @@ show_help() {
     echo "  ./saci.sh scan                       # Detect stack and libs"
     echo "  ./saci.sh init                       # Create PRP interactively"
     echo "  ./saci.sh analyze src/Button.tsx     # Analyze patterns"
+    echo "  ./saci.sh validate                   # Validate prp.json"
+    echo "  ./saci.sh validate custom.json       # Validate custom PRP file"
     echo "  ./saci.sh jump --dry-run              # Test run"
     echo "  ./saci.sh jump --provider amp         # Use Amp instead of Claude"
     echo "  ./saci.sh jump                        # Execute tasks"
@@ -1330,6 +1360,10 @@ case "${1:-jump}" in
         source "$SCRIPT_DIR/lib/tui.sh"
         shift
         show_status "${1:-prp.json}"
+        ;;
+    validate)
+        shift
+        run_validate "$@"
         ;;
     jump)
         shift 2>/dev/null || true
