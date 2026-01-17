@@ -28,21 +28,23 @@ Saci is an autonomous loop that runs [Claude Code](https://docs.anthropic.com/en
 
 ## Installation
 
+### One-line install (recommended)
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lucianfialho/saci/main/install-remote.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lucianfialho/saci/main/install.sh | bash
 ```
 
-Now you can use `saci` from any directory!
+This downloads and installs Saci globally. You can then use `saci` from any directory!
 
-<details>
-<summary>Manual installation</summary>
+### From source
 
 ```bash
 git clone https://github.com/lucianfialho/saci.git
 cd saci
 ./install.sh
 ```
-</details>
+
+Same installer script auto-detects if you're in the repo or installing remotely.
 
 ### Requirements
 
