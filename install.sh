@@ -1,7 +1,10 @@
 #!/bin/bash
 # ============================================================================
-# Saci Installer
-# Installs Saci to ~/.local/bin or /usr/local/bin
+# Saci Unified Installer
+# Detects if running from local repo or needs to clone from GitHub
+# Usage:
+#   ./install.sh                                    # Install from local repo
+#   curl -fsSL https://saci.sh/install | bash       # Install from GitHub
 # ============================================================================
 
 set -e
@@ -13,11 +16,54 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+REPO_URL="https://github.com/lucianfialho/saci"
+BRANCH="${SACI_BRANCH:-main}"
+
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}  🌪️ Saci Installer${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
+
+# Check dependencies
+check_deps() {
+    local missing=()
+    command -v jq >/dev/null 2>&1 || missing+=("jq")
+
+    # Only need git for remote install
+    if [ ! -f "saci.sh" ]; then
+        command -v git >/dev/null 2>&1 || missing+=("git")
+    fi
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo -e "${RED}[✗] Missing dependencies: ${missing[*]}${NC}"
+        echo ""
+        echo "Install them first:"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "  brew install ${missing[*]}"
+        else
+            echo "  sudo apt install ${missing[*]}"
+        fi
+        exit 1
+    fi
+}
+
+check_deps
+
+# Detect if we're in the repo or need to clone
+if [ -f "saci.sh" ] && [ -d "lib" ] && [ -d "templates" ]; then
+    echo -e "${BLUE}Detected local repository${NC}"
+    SOURCE_DIR="$(pwd)"
+    IS_LOCAL=true
+else
+    echo -e "${BLUE}Cloning from GitHub${NC}"
+    TMP_DIR=$(mktemp -d)
+    trap "rm -rf $TMP_DIR" EXIT
+
+    git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$TMP_DIR/saci" 2>/dev/null
+    SOURCE_DIR="$TMP_DIR/saci"
+    IS_LOCAL=false
+fi
 
 # Detect install directory
 if [ -w "/usr/local/bin" ]; then
@@ -25,7 +71,6 @@ if [ -w "/usr/local/bin" ]; then
 elif [ -d "$HOME/.local/bin" ]; then
     INSTALL_DIR="$HOME/.local/bin"
 else
-    echo "Creating $HOME/.local/bin..."
     mkdir -p "$HOME/.local/bin"
     INSTALL_DIR="$HOME/.local/bin"
 fi
@@ -34,15 +79,14 @@ echo -e "${BLUE}[1/5]${NC} Installing Saci core..."
 
 # Create directory for lib and templates
 SACI_LIB_DIR="$HOME/.local/share/saci"
+rm -rf "$SACI_LIB_DIR"
 mkdir -p "$SACI_LIB_DIR/lib"
 mkdir -p "$SACI_LIB_DIR/templates"
 
 # Copy core files
-cp lib/*.sh "$SACI_LIB_DIR/lib/"
-cp -r templates/* "$SACI_LIB_DIR/templates/" 2>/dev/null || true
-
-# Copy main script
-cp saci.sh "$SACI_LIB_DIR/saci"
+cp "$SOURCE_DIR/lib/"*.sh "$SACI_LIB_DIR/lib/"
+cp -r "$SOURCE_DIR/templates/"* "$SACI_LIB_DIR/templates/"
+cp "$SOURCE_DIR/saci.sh" "$SACI_LIB_DIR/saci"
 
 # Update saci.sh to point to the correct lib dir
 sed -i.bak "s|SCRIPT_DIR=\"\$(cd \"\$(dirname \"\${BASH_SOURCE\[0\]}\")\" && pwd)\"|SCRIPT_DIR=\"$SACI_LIB_DIR\"|g" "$SACI_LIB_DIR/saci"
@@ -52,18 +96,18 @@ echo -e "${BLUE}[2/5]${NC} Installing intelligent hooks system..."
 
 # Copy .saci directory with intelligent hooks
 mkdir -p "$SACI_LIB_DIR/.saci/hooks"
-if [ -d ".saci/hooks" ]; then
-    cp .saci/hooks/*.py "$SACI_LIB_DIR/.saci/hooks/" 2>/dev/null || true
-    cp .saci/hooks/*.sh "$SACI_LIB_DIR/.saci/hooks/" 2>/dev/null || true
+if [ -d "$SOURCE_DIR/.saci/hooks" ]; then
+    cp "$SOURCE_DIR/.saci/hooks/"*.py "$SACI_LIB_DIR/.saci/hooks/" 2>/dev/null || true
+    cp "$SOURCE_DIR/.saci/hooks/"*.sh "$SACI_LIB_DIR/.saci/hooks/" 2>/dev/null || true
     chmod +x "$SACI_LIB_DIR/.saci/hooks/"* 2>/dev/null || true
     echo "  ✓ 4 intelligent hooks installed"
 else
-    echo "  ⚠️  .saci/hooks not found (optional)"
+    echo "  ⚠️  Intelligent hooks not found (optional)"
 fi
 
 # Copy test scripts and documentation
-cp .saci/*.sh "$SACI_LIB_DIR/.saci/" 2>/dev/null || true
-cp .saci/*.md "$SACI_LIB_DIR/.saci/" 2>/dev/null || true
+cp "$SOURCE_DIR/.saci/"*.sh "$SACI_LIB_DIR/.saci/" 2>/dev/null || true
+cp "$SOURCE_DIR/.saci/"*.md "$SACI_LIB_DIR/.saci/" 2>/dev/null || true
 chmod +x "$SACI_LIB_DIR/.saci/"*.sh 2>/dev/null || true
 
 echo -e "${BLUE}[3/5]${NC} Installing Claude Code skills & agents..."
@@ -77,20 +121,20 @@ CLAUDE_SETTINGS="$CLAUDE_DIR/settings.json"
 
 # Install skills
 mkdir -p "$CLAUDE_SKILLS_DIR"
-cp -r templates/skills/* "$CLAUDE_SKILLS_DIR/" 2>/dev/null || true
+cp -r "$SOURCE_DIR/templates/skills/"* "$CLAUDE_SKILLS_DIR/" 2>/dev/null || true
 echo "  ✓ Skills installed"
 
 # Install agents
 mkdir -p "$CLAUDE_AGENTS_DIR"
-if [ -d ".claude/agents" ]; then
-    cp .claude/agents/*.md "$CLAUDE_AGENTS_DIR/" 2>/dev/null || true
+if [ -d "$SOURCE_DIR/.claude/agents" ]; then
+    cp "$SOURCE_DIR/.claude/agents/"*.md "$CLAUDE_AGENTS_DIR/" 2>/dev/null || true
     echo "  ✓ Agents installed (environment-fixer)"
 fi
 
 # Install documentation
 mkdir -p "$CLAUDE_DOCS_DIR"
-if [ -d ".claude/docs" ]; then
-    cp .claude/docs/*.md "$CLAUDE_DOCS_DIR/" 2>/dev/null || true
+if [ -d "$SOURCE_DIR/.claude/docs" ]; then
+    cp "$SOURCE_DIR/.claude/docs/"*.md "$CLAUDE_DOCS_DIR/" 2>/dev/null || true
     echo "  ✓ Claude Code knowledge base installed"
 fi
 
@@ -98,8 +142,8 @@ echo -e "${BLUE}[4/5]${NC} Configuring hooks..."
 
 # Install safety hook script
 mkdir -p "$CLAUDE_HOOKS_DIR"
-if [ -f "templates/hooks/scripts/safety-check.py" ]; then
-    cp templates/hooks/scripts/safety-check.py "$CLAUDE_HOOKS_DIR/"
+if [ -f "$SOURCE_DIR/templates/hooks/scripts/safety-check.py" ]; then
+    cp "$SOURCE_DIR/templates/hooks/scripts/safety-check.py" "$CLAUDE_HOOKS_DIR/"
     chmod +x "$CLAUDE_HOOKS_DIR/safety-check.py"
     echo "  ✓ Safety hook installed"
 fi
@@ -107,36 +151,29 @@ fi
 # Configure settings.json with all hooks
 mkdir -p "$CLAUDE_DIR"
 
-if [ -f ".claude/settings.json" ]; then
+if [ -f "$SOURCE_DIR/.claude/settings.json" ]; then
     # Use new settings.json with intelligent hooks
     if [ -f "$CLAUDE_SETTINGS" ]; then
         echo "  Backing up existing settings.json..."
         cp "$CLAUDE_SETTINGS" "$CLAUDE_SETTINGS.backup"
 
-        if command -v jq >/dev/null 2>&1; then
-            # Merge hooks from new settings with existing settings
-            tmp_settings=$(mktemp)
-            jq -s '.[0] * .[1]' "$CLAUDE_SETTINGS" ".claude/settings.json" > "$tmp_settings"
-            mv "$tmp_settings" "$CLAUDE_SETTINGS"
-            echo "  ✓ Settings merged (backup saved as settings.json.backup)"
-        else
-            echo -e "  ${YELLOW}⚠️  jq not found - copying new settings${NC}"
-            cp ".claude/settings.json" "$CLAUDE_SETTINGS"
-        fi
+        # Merge hooks from new settings with existing settings
+        tmp_settings=$(mktemp)
+        jq -s '.[0] * .[1]' "$CLAUDE_SETTINGS" "$SOURCE_DIR/.claude/settings.json" > "$tmp_settings"
+        mv "$tmp_settings" "$CLAUDE_SETTINGS"
+        echo "  ✓ Settings merged (backup saved as settings.json.backup)"
     else
-        cp ".claude/settings.json" "$CLAUDE_SETTINGS"
+        cp "$SOURCE_DIR/.claude/settings.json" "$CLAUDE_SETTINGS"
         echo "  ✓ Settings.json created with intelligent hooks"
     fi
-elif [ -f "templates/hooks/hooks.json" ]; then
+elif [ -f "$SOURCE_DIR/templates/hooks/hooks.json" ]; then
     # Fallback to old hooks.json if new settings not available
     if [ -f "$CLAUDE_SETTINGS" ]; then
-        if command -v jq >/dev/null 2>&1; then
-            tmp_settings=$(mktemp)
-            jq -s '.[0] * .[1]' "$CLAUDE_SETTINGS" "templates/hooks/hooks.json" > "$tmp_settings"
-            mv "$tmp_settings" "$CLAUDE_SETTINGS"
-        fi
+        tmp_settings=$(mktemp)
+        jq -s '.[0] * .[1]' "$CLAUDE_SETTINGS" "$SOURCE_DIR/templates/hooks/hooks.json" > "$tmp_settings"
+        mv "$tmp_settings" "$CLAUDE_SETTINGS"
     else
-        cp "templates/hooks/hooks.json" "$CLAUDE_SETTINGS"
+        cp "$SOURCE_DIR/templates/hooks/hooks.json" "$CLAUDE_SETTINGS"
     fi
     echo "  ✓ Basic hooks configured"
 fi
@@ -156,15 +193,23 @@ echo ""
 echo "Installed components:"
 echo "  ✓ Saci core (saci.sh, lib, templates)"
 echo "  ✓ PRP templates (5-layer Context Engineering prompts)"
-echo "    • base.md + 5 domains + 3 task-types"
+echo "    • base.md + 5 domains (frontend/backend/devops/testing/docs)"
+echo "    • 3 task-types (feature/bugfix/refactor)"
 echo "  ✓ 4 intelligent hooks (PreToolUse, PostToolUse, Stop, UserPromptSubmit)"
 echo "  ✓ Debug mode framework (environment-fixer subagent)"
 echo "  ✓ Claude Code knowledge base (11 docs)"
 echo "  ✓ Skills (prp, default.md)"
 echo ""
+echo "What's new:"
+echo "  🎯 Smart domain detection (auto-detects frontend/backend/etc)"
+echo "  📚 Domain-specific expertise (React patterns, API design, etc)"
+echo "  ✅ Task-type guidance (feature/bugfix/refactor workflows)"
+echo "  🔧 Stale branch prevention (smart checkout logic)"
+echo ""
 echo "Usage:"
-echo "  saci scan      # Detect stack"
-echo "  saci init      # Create PRP"
+echo "  cd your-project"
+echo "  saci scan      # Detect stack & generate PRP"
+echo "  saci init      # Create PRP interactively"
 echo "  saci jump      # Execute autonomous loop"
 echo ""
 echo "Documentation:"
