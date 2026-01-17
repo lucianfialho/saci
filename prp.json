@@ -161,7 +161,7 @@
           "title": "Display validation summary and suggestions",
           "description": "Show formatted summary of validation results with suggestions for improvements",
           "priority": 5,
-          "passes": true,
+          "passes": false,
           "dependencies": [
             "F1-T4"
           ],

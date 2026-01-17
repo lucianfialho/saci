@@ -1523,24 +1523,30 @@ display_validation_summary() {
     echo -e "${CYAN}  Validation Summary${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo "Statistics:"
+    echo "PRP Statistics:"
     echo "  • Features: $features_count"
     echo "  • Tasks: $tasks_count"
     echo "  • Total dependencies: $total_deps"
     echo ""
 
+    # Show results summary
+    echo "Validation Results:"
     if [ "$errors" -gt 0 ]; then
-        echo -e "${RED}Errors: $errors${NC}"
+        echo -e "  ${RED}Errors: $errors${NC}"
+    else
+        echo -e "  ${GREEN}Errors: 0${NC}"
     fi
 
     if [ "$warnings" -gt 0 ]; then
-        echo -e "${YELLOW}Warnings: $warnings${NC}"
+        echo -e "  ${YELLOW}Warnings: $warnings${NC}"
+    else
+        echo -e "  ${GREEN}Warnings: 0${NC}"
     fi
 
     # Display suggestions if any
     if [ ${#suggestions[@]} -gt 0 ]; then
         echo ""
-        echo "Suggestions:"
+        echo -e "${YELLOW}Suggestions for improvement:${NC}"
         for suggestion in "${suggestions[@]}"; do
             [ -z "$suggestion" ] && continue
             echo -e "  ${YELLOW}→${NC} $suggestion"
@@ -1548,15 +1554,14 @@ display_validation_summary() {
     fi
 
     echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     if [ "$errors" -eq 0 ]; then
         echo -e "${GREEN}✓ PRP is valid and ready to use${NC}"
-        echo ""
     else
         echo -e "${RED}✗ PRP validation failed - please fix the errors above${NC}"
-        echo ""
-        exit 1
     fi
+    echo ""
 }
 
 show_help() {
